@@ -1,0 +1,180 @@
+{
+  "name": "Figma Renderer Creatives",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Generate creatives",
+        "formDescription": "Renders the selected Figma template in each ratio and saves the files to Google Drive.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Template",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "promo"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Ratios",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "1x1"
+                  },
+                  {
+                    "option": "9x16"
+                  },
+                  {
+                    "option": "16x9"
+                  }
+                ]
+              },
+              "multiselect": true,
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Headline",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Body",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "CTA"
+            },
+            {
+              "fieldLabel": "Image URL"
+            },
+            {
+              "fieldLabel": "Background URL"
+            },
+            {
+              "fieldLabel": "Campaign",
+              "placeholder": "e.g. autumn-sale"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000001",
+      "name": "Creative form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "figma-renderer-form"
+    },
+    {
+      "parameters": {
+        "jsCode": "// One render job per selected ratio. Template and ratio names match the\n// Figma frame names (\"promo/1x1\"), so there are no IDs to maintain here.\nconst input = $input.first().json;\nconst ratios = Array.isArray(input.Ratios) ? input.Ratios : [input.Ratios];\nconst campaign = (input.Campaign || 'poc').trim().replace(/\\s+/g, '-').toLowerCase();\nconst stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');\n\n// Keys must match the #layer names in Figma (without the #).\n// Leave a key out to keep the Figma design; send \"\" to hide the layer.\nconst data = { headline: input.Headline };\nif (input.Body) data.body = input.Body;\nif (input.CTA) data.cta = input.CTA;\nif (input['Image URL']) data.image = input['Image URL'];\nif (input['Background URL']) data.background = input['Background URL'];\n\nreturn ratios.map((ratio) => ({\n  json: {\n    template: input.Template,\n    ratio,\n    data,\n    fileName: `${campaign}_${input.Template}_${ratio}_${stamp}.png`,\n  },\n}));"
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000002",
+      "name": "Build render jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://renderer.example.com/render",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ template: $json.template, ratio: $json.ratio, data: $json.data, format: 'png', scale: 1 }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000003",
+      "name": "Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('Build render jobs').item.json.fileName }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_DRIVE_FOLDER_ID"
+        },
+        "options": {}
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000004",
+      "name": "Upload to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        720,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Creative form": {
+      "main": [
+        [
+          {
+            "node": "Build render jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build render jobs": {
+      "main": [
+        [
+          {
+            "node": "Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render": {
+      "main": [
+        [
+          {
+            "node": "Upload to Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

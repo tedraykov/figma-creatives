@@ -1,0 +1,11 @@
+services:
+  renderer:
+    build: .
+    container_name: figma-renderer
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./fonts:/usr/share/fonts/custom:ro
+    shm_size: "512mb"
