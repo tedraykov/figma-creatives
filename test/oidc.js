@@ -19,7 +19,7 @@ const codes = new Map();
 const idp = createServer(async (req, res) => {
   const url = new URL(req.url, IDP);
   const json = (o) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(o)); };
-  if (url.pathname === '/.well-known/openid-configuration') return json({ issuer: `${IDP}/`, authorization_endpoint: `${IDP}/authorize`, token_endpoint: `${IDP}/token`, jwks_uri: `${IDP}/jwks` });
+  if (url.pathname === '/.well-known/openid-configuration') return json({ issuer: `${IDP}/`, authorization_endpoint: `${IDP}/authorize`, token_endpoint: `${IDP}/token`, userinfo_endpoint: `${IDP}/userinfo`, token_endpoint_auth_methods_supported: ['client_secret_basic'], jwks_uri: `${IDP}/jwks` });
   if (url.pathname === '/jwks') return json({ keys: [jwk] });
   if (url.pathname === '/authorize') {
     const p = url.searchParams, code = `code-${codes.size}`;
@@ -29,10 +29,17 @@ const idp = createServer(async (req, res) => {
   if (url.pathname === '/token') {
     const form = new URLSearchParams(await new Promise((r) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => r(b)); }));
     const c = codes.get(form.get('code'));
-    if (!c || createHash('sha256').update(form.get('code_verifier')).digest('base64url') !== c.challenge || form.get('client_secret') !== 'shh') { res.statusCode = 400; return json({ error: 'invalid_grant' }); }
-    const id_token = await new SignJWT({ email: c.email, email_verified: true, name: 'Test User', nonce: c.nonce })
-      .setProtectedHeader({ alg: 'RS256', kid: 'k1' }).setIssuer(`${IDP}/`).setAudience('client-1').setIssuedAt().setExpirationTime('5m').sign(privateKey);
-    return json({ id_token, access_token: 'x', token_type: 'Bearer' });
+    // Like Clerk: the client authenticates with HTTP Basic, and a secret in the body is not accepted.
+    const basic = req.headers.authorization === `Basic ${Buffer.from('client-1:shh').toString('base64')}`;
+    if (!c || !basic || form.has('client_secret') || createHash('sha256').update(form.get('code_verifier')).digest('base64url') !== c.challenge) { res.statusCode = 400; return json({ error: 'invalid_grant' }); }
+    // ...and the ID token carries no email: it is only available from the user-info endpoint.
+    const id_token = await new SignJWT({ nonce: c.nonce })
+      .setProtectedHeader({ alg: 'RS256', kid: 'k1' }).setSubject(`user-${c.email}`).setIssuer(`${IDP}/`).setAudience('client-1').setIssuedAt().setExpirationTime('5m').sign(privateKey);
+    return json({ id_token, access_token: `at-${c.email}`, token_type: 'Bearer' });
+  }
+  if (url.pathname === '/userinfo') {
+    const email = String(req.headers.authorization ?? '').replace('Bearer at-', '');
+    return json({ sub: `user-${email}`, email, email_verified: true, name: 'Test User' });
   }
   res.statusCode = 404; res.end();
 });

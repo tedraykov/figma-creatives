@@ -55,9 +55,20 @@ Environment:
 | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | From a "Regular Web Application" in your provider |
 | `ALLOWED_EMAILS` | Comma-separated emails, or `@yourcompany.com` for a whole domain |
 | `PUBLIC_URL` | Optional, e.g. `https://figma-creatives.tedraykov.me`; otherwise taken from the request |
+| `OIDC_TOKEN_AUTH` | Optional: `basic` or `post`, to override how the client secret is sent |
 | `AUTH_DISABLED=true` | Skips sign-in. Local use only: anyone who can reach the server can read and change your settings |
 
-In Auth0: create a Regular Web Application, add `https://<your-domain>/auth/callback` to Allowed Callback URLs (and `http://localhost:3000/auth/callback` for local use) and `https://<your-domain>` to Allowed Logout URLs.
+Any OpenID Connect provider works. Two setups are known to work:
+
+**Clerk (email-only sign-in)**
+1. In the Clerk Dashboard, open **User & authentication**: enable **Email** with *Email verification code* (and/or link), and leave Password, Phone and Username off. Under **SSO connections**, enable no social providers.
+2. Under **Restrictions**, set sign-ups to invitation-only, or add an allowlist, so strangers can't create accounts. (`ALLOWED_EMAILS` is a second lock on this app.)
+3. Open **OAuth applications**, then **Add application**, and create one. Select the scopes `openid`, `email` and `profile`, and add the redirect URI `https://<your-domain>/auth/callback`. Copy the **Client ID** and **Client Secret** (the secret is shown once).
+4. Set `OIDC_ISSUER` to your instance's **Frontend API URL** (for example `https://example-name-12.clerk.accounts.dev`; the Discovery URL is that plus `/.well-known/openid-configuration`), plus `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `ALLOWED_EMAILS`.
+
+**Auth0:** create a Regular Web Application, add `https://<your-domain>/auth/callback` to Allowed Callback URLs (and `http://localhost:3000/auth/callback` for local use) and your domain to Allowed Logout URLs.
+
+The app authenticates at the token endpoint with HTTP Basic (what Clerk requires) and reads the email from the ID token, or from the provider's user-info endpoint when the ID token leaves it out. Set `OIDC_TOKEN_AUTH=post` only for a provider that accepts nothing but the secret in the request body.
 
 Without `OIDC_*` and without `AUTH_DISABLED`, the UI stays locked and says why. The render API is always closed until you generate a key.
 

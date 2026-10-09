@@ -2,7 +2,7 @@
 // Authorization-code flow with PKCE; the session is a signed, HTTP-only cookie.
 // Machine clients (n8n) don't use this: they send an API key issued in Settings.
 //
-//   OIDC_ISSUER         e.g. https://your-tenant.eu.auth0.com/
+//   OIDC_ISSUER         e.g. https://your-tenant.eu.auth0.com/ or a Clerk Frontend API URL
 //   OIDC_CLIENT_ID / OIDC_CLIENT_SECRET
 //   ALLOWED_EMAILS      comma-separated emails (or @domain.com entries) allowed to sign in
 //   PUBLIC_URL          optional, e.g. https://figma-creatives.example.com (else derived from the request)
@@ -109,23 +109,36 @@ export function authRoutes(app) {
       if (!txn || req.query.state !== txn.state) throw new HttpError(400, 'Sign-in session expired. Try again.');
       if (req.query.error) throw new HttpError(401, `Sign-in failed: ${req.query.error_description ?? req.query.error}`);
       const { doc, jwks } = await getDiscovery();
+      // HTTP Basic is the standard way to authenticate at the token endpoint (Clerk requires it); the
+      // secret goes in the body only for providers that list nothing but client_secret_post.
+      const methods = doc.token_endpoint_auth_methods_supported ?? ['client_secret_basic'];
+      const basic = env.OIDC_TOKEN_AUTH === 'basic' || (env.OIDC_TOKEN_AUTH !== 'post' && (methods.includes('client_secret_basic') || !methods.includes('client_secret_post')));
+      const form = { grant_type: 'authorization_code', code: String(req.query.code), redirect_uri: redirectUri(req), client_id: env.OIDC_CLIENT_ID, code_verifier: txn.verifier };
+      if (!basic) form.client_secret = env.OIDC_CLIENT_SECRET;
       const tokenRes = await fetch(doc.token_endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'authorization_code', code: String(req.query.code), redirect_uri: redirectUri(req),
-          client_id: env.OIDC_CLIENT_ID, client_secret: env.OIDC_CLIENT_SECRET, code_verifier: txn.verifier,
-        }),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          ...(basic ? { Authorization: `Basic ${Buffer.from(`${encodeURIComponent(env.OIDC_CLIENT_ID)}:${encodeURIComponent(env.OIDC_CLIENT_SECRET)}`).toString('base64')}` } : {}),
+        },
+        body: new URLSearchParams(form),
         signal: AbortSignal.timeout(10000),
       });
       const tokens = await tokenRes.json();
       if (!tokenRes.ok || !tokens.id_token) throw new HttpError(401, `Token exchange failed: ${tokens.error_description ?? tokens.error ?? tokenRes.status}`);
       const { payload } = await jwtVerify(tokens.id_token, jwks, { issuer: doc.issuer, audience: env.OIDC_CLIENT_ID });
       if (payload.nonce !== txn.nonce) throw new HttpError(401, 'Invalid sign-in response (nonce mismatch)');
-      const email = String(payload.email ?? '').toLowerCase();
-      if (!email || payload.email_verified === false) throw new HttpError(403, 'Your account has no verified email address.');
+      // Some providers (Clerk) leave the email out of the ID token: ask the user-info endpoint, and check it is the same person.
+      let claims = payload;
+      if (!payload.email && doc.userinfo_endpoint && tokens.access_token) {
+        const ui = await fetch(doc.userinfo_endpoint, { headers: { Authorization: `Bearer ${tokens.access_token}` }, signal: AbortSignal.timeout(10000) });
+        const info = ui.ok ? await ui.json() : {};
+        if (info.sub && info.sub === payload.sub) claims = { ...payload, ...info };
+      }
+      const email = String(claims.email ?? '').toLowerCase();
+      if (!email || claims.email_verified === false) throw new HttpError(403, 'Your account has no verified email address.');
       if (!isAllowed(email)) throw new HttpError(403, `${email} is not allowed to use this app. Add it to ALLOWED_EMAILS.`);
-      setCookie(res, req, 'session', sign(b64({ email, name: payload.name ?? email, exp: Date.now() + SESSION_DAYS * 86_400_000 })), SESSION_DAYS * 86400);
+      setCookie(res, req, 'session', sign(b64({ email, name: claims.name ?? email, exp: Date.now() + SESSION_DAYS * 86_400_000 })), SESSION_DAYS * 86400);
       setCookie(res, req, 'oidc', '', 0);
       res.redirect('/');
     } catch (e) { next(e); }

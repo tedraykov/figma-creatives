@@ -1,3 +1,8 @@
 node_modules
 test/out
 .env
+# runtime data: SQLite database with tokens and API key hashes
+data/
+*.db
+*.db-wal
+*.db-shm
