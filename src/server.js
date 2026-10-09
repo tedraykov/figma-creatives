@@ -34,6 +34,15 @@ const apiKeyOrSession = (req, _res, next) => {
   requireSession(req, _res, next);
 };
 for (const route of ['/templates', '/render', '/cache']) app.use(route, apiKeyOrSession);
+// Read-only project list for machine clients (n8n picks a project, then passes its id as projectId).
+// Sources and credentials stay out of it.
+app.get('/projects', apiKeyOrSession, (_req, res) => {
+  const fallback = getDefaultProject()?.id;
+  const projects = publicConfig(describeType).projects.map((p) => ({
+    id: p.id, name: p.name, integration: getIntegration(p.integrationId)?.type, default: p.id === fallback,
+  }));
+  res.json({ projects });
+});
 for (const route of ['/config', '/integrations', '/projects', '/api-keys']) app.use(route, requireSession);
 
 const wrap = (fn) => (req, res, next) => fn(req, res).catch(next);

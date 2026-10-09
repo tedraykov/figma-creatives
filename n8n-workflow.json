@@ -1,63 +1,29 @@
 {
-  "name": "Figma Renderer Creatives",
+  "name": "Creatives from Google Sheets",
   "nodes": [
     {
       "parameters": {
         "formTitle": "Generate creatives",
-        "formDescription": "Renders the selected Figma template in each ratio and saves the files to Google Drive.",
+        "formDescription": "Step 1 of 3. Say where the copy is and where the files go. Next you choose the project and the templates.",
         "formFields": {
           "values": [
             {
-              "fieldLabel": "Template",
-              "fieldType": "dropdown",
-              "fieldOptions": {
-                "values": [
-                  {
-                    "option": "promo"
-                  }
-                ]
-              },
+              "fieldLabel": "Sheet URL",
+              "placeholder": "https://docs.google.com/spreadsheets/d/…/edit#gid=0",
               "requiredField": true
             },
             {
-              "fieldLabel": "Ratios",
-              "fieldType": "dropdown",
-              "fieldOptions": {
-                "values": [
-                  {
-                    "option": "1x1"
-                  },
-                  {
-                    "option": "9x16"
-                  },
-                  {
-                    "option": "16x9"
-                  }
-                ]
-              },
-              "multiselect": true,
+              "fieldLabel": "Drive folder URL",
+              "placeholder": "https://drive.google.com/drive/folders/…",
               "requiredField": true
-            },
-            {
-              "fieldLabel": "Headline",
-              "requiredField": true
-            },
-            {
-              "fieldLabel": "Body",
-              "fieldType": "textarea"
-            },
-            {
-              "fieldLabel": "CTA"
-            },
-            {
-              "fieldLabel": "Image URL"
-            },
-            {
-              "fieldLabel": "Background URL"
             },
             {
               "fieldLabel": "Campaign",
-              "placeholder": "e.g. autumn-sale"
+              "placeholder": "Campaign id or name from the sheet (leave empty for all rows)"
+            },
+            {
+              "fieldLabel": "Languages",
+              "placeholder": "e.g. en, de, fr (leave empty for all languages)"
             }
           ]
         },
@@ -75,12 +41,15 @@
     },
     {
       "parameters": {
-        "jsCode": "// One render job per selected ratio. Template and ratio names match the\n// Figma frame names (\"promo/1x1\"), so there are no IDs to maintain here.\nconst input = $input.first().json;\nconst ratios = Array.isArray(input.Ratios) ? input.Ratios : [input.Ratios];\nconst campaign = (input.Campaign || 'poc').trim().replace(/\\s+/g, '-').toLowerCase();\nconst stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');\n\n// Keys must match the #layer names in Figma (without the #).\n// Leave a key out to keep the Figma design; send \"\" to hide the layer.\nconst data = { headline: input.Headline };\nif (input.Body) data.body = input.Body;\nif (input.CTA) data.cta = input.CTA;\nif (input['Image URL']) data.image = input['Image URL'];\nif (input['Background URL']) data.background = input['Background URL'];\n\nreturn ratios.map((ratio) => ({\n  json: {\n    template: input.Template,\n    ratio,\n    data,\n    fileName: `${campaign}_${input.Template}_${ratio}_${stamp}.png`,\n  },\n}));"
+        "url": "https://creatives.tedraykov.me/projects",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
       },
-      "id": "b2f0c001-0000-4000-8000-000000000002",
-      "name": "Build render jobs",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "b2f0c001-0000-4000-8000-000000000006",
+      "name": "Get projects",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         240,
         0
@@ -88,13 +57,110 @@
     },
     {
       "parameters": {
+        "formTitle": "Choose a project",
+        "formDescription": "Step 2 of 3. The projects linked in Creatives. The default project is listed first.",
+        "defineForm": "json",
+        "jsonOutput": "={{ JSON.stringify([{ fieldLabel: 'Project', fieldType: 'dropdown', requiredField: true, fieldOptions: { values: [...$json.projects].sort((a, b) => Number(b.default) - Number(a.default)).map((p) => ({ option: p.name })) } }]) }}",
+        "options": {}
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000007",
+      "name": "Choose project",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.3,
+      "position": [
+        480,
+        0
+      ],
+      "webhookId": "figma-renderer-project"
+    },
+    {
+      "parameters": {
+        "url": "https://creatives.tedraykov.me/templates",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "projectId",
+              "value": "={{ $('Get projects').first().json.projects.find((p) => p.name === $json.Project).id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000008",
+      "name": "Get templates",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Choose templates",
+        "formDescription": "Step 3 of 3. Every template and aspect ratio in the project (template/ratio). Pick as many as you need.",
+        "defineForm": "json",
+        "jsonOutput": "={{ JSON.stringify([{ fieldLabel: 'Creatives', fieldType: 'dropdown', multiselect: true, requiredField: true, fieldOptions: { values: Object.entries($json.templates).flatMap(([template, ratios]) => Object.keys(ratios).map((ratio) => ({ option: template + '/' + ratio }))) } }]) }}",
+        "options": {}
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000009",
+      "name": "Choose creatives",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        0
+      ],
+      "webhookId": "figma-renderer-creatives"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $('Creative form').first().json['Sheet URL'] }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ ($('Creative form').first().json['Sheet URL'].match(/gid=(\\d+)/) || [])[1] || '0' }}"
+        },
+        "options": {}
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000005",
+      "name": "Read sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sheet columns: campaign_id | campaign | language | headline | body | cta | background\n// The sheet holds content only. The project, templates and ratios are chosen in the forms.\n// One row = one campaign in one language; n languages = n rows with the same campaign_id.\n// A cell left empty is not sent, so the design keeps its default for that layer.\n// A cell containing only \"-\" hides the layer (the renderer treats \"\" as hidden).\nconst form = $('Creative form').first().json;\nconst projects = $('Get projects').first().json.projects;\nconst projectName = $('Choose project').first().json.Project;\nconst projectId = projects.find((p) => p.name === projectName)?.id;\nif (!projectId) throw new Error(`Project \"${projectName}\" is no longer in Creatives.`);\nconst picked = $('Choose creatives').first().json.Creatives;\nconst creatives = (Array.isArray(picked) ? picked : [picked]).map((v) => {\n  const i = String(v).lastIndexOf('/');\n  return { template: v.slice(0, i), ratio: v.slice(i + 1) };\n});\n\nconst slug = (s) => String(s ?? '').trim().replace(/\\s+/g, '-').toLowerCase();\nconst wantCampaign = slug(form.Campaign);\nconst wantLanguages = String(form.Languages ?? '').split(',').map(slug).filter(Boolean);\nconst stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');\n\n// Content columns -> layer keys in the design (#headline, #body, #cta, #background).\nconst FIELDS = ['headline', 'body', 'cta', 'background'];\nconst cell = (row, name) => {\n  const key = Object.keys(row).find((k) => k.trim().toLowerCase() === name);\n  const value = key === undefined ? '' : String(row[key] ?? '').trim();\n  return value === '-' ? '' : value === '' ? undefined : value;\n};\n\n// The sheet must be the Creatives table: these columns are always present and filled. The content\n// columns can be left blank per row, or empty for the whole table, so they are not required here.\nconst TABLE = ['campaign_id', 'campaign', 'language', 'headline', 'body', 'cta', 'background'];\nconst REQUIRED = ['campaign_id', 'campaign', 'language'];\nconst headers = new Set($input.all().flatMap((i) => Object.keys(i.json)).map((k) => k.trim().toLowerCase()));\nconst missing = REQUIRED.filter((c) => !headers.has(c));\nif (missing.length) throw new Error(`The sheet is not in the expected table format. Missing columns: ${missing.join(', ')}. Expected: ${TABLE.join(' | ')}`);\n\nconst jobs = [];\nfor (const item of $input.all()) {\n  const row = item.json;\n  const campaignId = slug(cell(row, 'campaign_id'));\n  const campaignName = slug(cell(row, 'campaign'));\n  if (!campaignId && !campaignName) continue; // blank or spacer row\n  const language = slug(cell(row, 'language') ?? 'default');\n  if (wantCampaign && wantCampaign !== campaignId && wantCampaign !== campaignName) continue;\n  if (wantLanguages.length && !wantLanguages.includes(language)) continue;\n\n  const data = {};\n  for (const field of FIELDS) {\n    const value = cell(row, field);\n    if (value !== undefined) data[field] = value;\n  }\n  for (const { template, ratio } of creatives) {\n    jobs.push({\n      json: { projectId, template, ratio, data, language, fileName: `${campaignId || campaignName}_${template}_${language}_${ratio}_${stamp}.png` },\n    });\n  }\n}\nif (!jobs.length) throw new Error('No sheet rows matched the campaign and languages you entered.');\nreturn jobs;"
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000002",
+      "name": "Build render jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "https://renderer.example.com/render",
+        "url": "https://creatives.tedraykov.me/render",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ template: $json.template, ratio: $json.ratio, data: $json.data, format: 'png', scale: 1 }) }}",
+        "jsonBody": "={{ JSON.stringify({ projectId: $json.projectId, template: $json.template, ratio: $json.ratio, data: $json.data, format: 'png', scale: 1 }) }}",
         "options": {
           "response": {
             "response": {
@@ -109,7 +175,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        480,
+        1680,
         0
       ]
     },
@@ -123,8 +189,8 @@
         },
         "folderId": {
           "__rl": true,
-          "mode": "id",
-          "value": "YOUR_DRIVE_FOLDER_ID"
+          "mode": "url",
+          "value": "={{ $('Creative form').first().json['Drive folder URL'] }}"
         },
         "options": {}
       },
@@ -133,13 +199,68 @@
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        720,
+        1920,
         0
       ]
     }
   ],
   "connections": {
     "Creative form": {
+      "main": [
+        [
+          {
+            "node": "Get projects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get projects": {
+      "main": [
+        [
+          {
+            "node": "Choose project",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose project": {
+      "main": [
+        [
+          {
+            "node": "Get templates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get templates": {
+      "main": [
+        [
+          {
+            "node": "Choose creatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose creatives": {
+      "main": [
+        [
+          {
+            "node": "Read sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read sheet": {
       "main": [
         [
           {

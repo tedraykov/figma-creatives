@@ -41,6 +41,9 @@ const child3 = spawn(process.execPath, [join(here, '..', 'src', 'server.js')], {
 for (let i = 0; i < 50; i++) { if (await fetch(`${base}/health`).then((r) => r.ok, () => false)) break; await new Promise((r) => setTimeout(r, 100)); }
 assert((await call('/templates', a.key)).status === 200, 'a generated key opens the render API');
 assert((await call('/templates', b.key)).status === 200, 'a second key works too');
+const listed = await (await call('/projects', a.key)).json();
+assert(listed.projects?.length >= 1 && listed.projects.some((p) => p.default) && !JSON.stringify(listed).includes('source'), 'an API key can list projects (id, name, default) without sources');
+assert((await call('/projects')).status === 401, 'the project list needs a key or session');
 assert((await call('/api-keys', a.key)).status === 401, 'an API key cannot reach admin settings');
 assert((await call('/templates', 'fr_wrong')).status === 401, 'an unknown key is rejected');
 child3.kill();

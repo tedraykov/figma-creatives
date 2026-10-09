@@ -117,11 +117,24 @@ Errors come back as JSON: `401` bad key, `404` unknown template or ratio, `422` 
 
 Import `n8n-workflow.json`, then:
 
-1. In **Render**, set the URL to your renderer and create a Header Auth credential: name `Authorization`, value `Bearer <API_KEY>`.
-2. In **Upload to Drive**, connect Google and set the folder ID.
-3. Add your template names to the form's Template dropdown.
+1. In **Read sheet** and **Upload to Drive**, connect your Google account. The sheet and the Drive folder are not configured in the workflow: you paste their URLs into the form each run (the tab comes from the `#gid=` in the sheet URL; a URL without it reads the first tab).
+2. In **Render**, set the URL to your renderer and create a Header Auth credential: name `Authorization`, value `Bearer <key>`, with a key created in **Settings → API keys**.
 
-Each form submission renders one file per selected ratio and uploads them to Drive.
+The copy lives in the sheet, one row per creative per language, with these columns (header names are not case-sensitive):
+
+| campaign_id | campaign | language | headline | body | cta | background |
+|---|---|---|---|---|---|---|
+| c-101 | Autumn sale | en | Autumn sale | Up to 40% off | Shop now | https://…/bg.jpg |
+| c-101 | Autumn sale | de | Herbstangebot | Bis zu 40 % Rabatt | Jetzt kaufen | |
+| c-102 | Product teaser | en | Coming soon | | | |
+
+- Format the range as a Google Sheets **table** (Format → Convert to table) named `Creatives`, with exactly these columns. The workflow reads the table's data and stops with a clear error if `campaign_id`, `campaign` or `language` is missing.
+- The sheet holds content only. The **project**, **templates** and **aspect ratios** are chosen in the forms each time you run it, and the lists come live from Creatives (`GET /projects`, then `GET /templates?projectId=…`), so new templates and ratios appear without editing the workflow.
+- Add as many languages as you like: each is just more rows with the same `campaign_id`.
+- An empty cell is not sent, so the design keeps its default for that layer. That is how a creative can use only a subset of headline, body, cta and background. A cell containing only `-` hides the layer.
+- The columns match the `#headline`, `#body`, `#cta` and `#background` layers in the design. To use more fields, add a column and list its name in `FIELDS` in the **Build render jobs** node.
+
+Running the form takes three short steps: an optional campaign (id or name) and language list (for example `en, de`), then the project, then one or more `template/ratio` choices. Each matching row is rendered once per choice, with that `projectId`, and uploaded to Drive as `campaignid_template_language_ratio_timestamp.png`.
 
 ## Test
 
