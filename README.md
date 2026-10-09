@@ -1,8 +1,8 @@
-# Figma Template Renderer
+# Creatives
 
-A self-hosted service that renders Figma frames with real content. Designers edit templates in Figma; the renderer reads them live through the Figma API (no importing), swaps in your copy and images, and returns a PNG, JPG or WebP. n8n calls it and uploads the result to Google Drive.
+A self-hosted service that turns design templates into marketing creatives. Designers edit templates in Figma (or Canva); Creatives reads them live (no importing), swaps in your copy and images, and returns a PNG, JPG or WebP. n8n calls it and uploads the result to Google Drive. A web UI lets you link projects, browse templates and preview them with your own copy.
 
-## How it works
+## How it works (Figma)
 
 1. Finds frames named `template/ratio` in your Figma file.
 2. Exports every static layer as a PNG through the Figma API, keeping the layer order.
@@ -25,6 +25,41 @@ Figma data and exports are cached per file version. Design changes are picked up
   - Auto width: one line, growing from its alignment anchor. Good for button labels.
 
 Data semantics: a key that's missing keeps the Figma design; `""` or `null` hides the layer; any other value replaces it.
+
+## Projects and integrations
+
+- An **integration** is a connection to a template source, with its credentials. Add them once in Settings:
+  - **Figma**: a personal access token. Frames named `template/ratio` are rebuilt as HTML and screenshotted, with live preview in the browser and text auto-fit.
+  - **Canva**: an OAuth client from the Canva developer portal (register the redirect URL shown in Settings, then click Connect). Brand templates titled `template/ratio` with autofill fields are filled and exported by Canva. Needs a Canva Enterprise account (the Autofill API requires it). Text and image fields only; Canva can't hide a field, and previews cost a real design export (no live preview). Each render creates a design in the connected account, and Canva has no API to delete it.
+  - **Static samples**: built in, demo templates from `STATIC_DIR` (default `samples/`).
+- A **project** is one set of templates reached through an integration: a Figma file link, or an optional title filter for Canva. Projects are listed in the sidebar (collapsible), and one is the default.
+- With nothing configured the default project is the static samples, so the app can be tried with no account. If `FIGMA_TOKEN` / `FIGMA_FILE_KEY` are set, an "Environment" integration and project appear too.
+- API requests take an optional `projectId`; without it the default project is used. A raw `fileKey` is still accepted for older clients.
+
+The static integration reads Figma-shaped JSON: `<template>/<ratio>.json` per frame, plus optional `<template>/<ratio>/<layerId>.png` exports for static layers (`:` in ids becomes `_`). `node --env-file=.env scripts/snapshot-figma.mjs` copies a real Figma file into that format.
+
+Adding an integration means implementing the interface documented in `src/integrations/index.js` and registering it there. Sources that expose frame trees (Figma, static) only implement the small frame-source interface in `src/integrations/figma.js` and get rendering from `frames.js`.
+
+## Access control
+
+Two kinds of caller, two mechanisms:
+
+- **People (the web UI)** sign in through any OpenID Connect provider. Auth0's free plan (25,000 monthly users, social logins included) works well, as do Google, Okta or Clerk. Only emails in `ALLOWED_EMAILS` get in, so a public sign-up on your provider can't reach your settings.
+- **Machines (n8n)** use API keys generated in **Settings → API keys**. Create one per client, name it, and copy it when shown (it can't be shown again). Keys only grant `/templates`, `/render` and `/cache/clear`, never settings. In n8n, use a Header Auth credential: `Authorization: Bearer <key>`.
+
+Environment:
+
+| Variable | Purpose |
+|---|---|
+| `OIDC_ISSUER` | Provider URL, e.g. `https://your-tenant.eu.auth0.com/` |
+| `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | From a "Regular Web Application" in your provider |
+| `ALLOWED_EMAILS` | Comma-separated emails, or `@yourcompany.com` for a whole domain |
+| `PUBLIC_URL` | Optional, e.g. `https://figma-creatives.tedraykov.me`; otherwise taken from the request |
+| `AUTH_DISABLED=true` | Skips sign-in. Local use only: anyone who can reach the server can read and change your settings |
+
+In Auth0: create a Regular Web Application, add `https://<your-domain>/auth/callback` to Allowed Callback URLs (and `http://localhost:3000/auth/callback` for local use) and `https://<your-domain>` to Allowed Logout URLs.
+
+Without `OIDC_*` and without `AUTH_DISABLED`, the UI stays locked and says why. The render API is always closed until you generate a key.
 
 ## Setup
 

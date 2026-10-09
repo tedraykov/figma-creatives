@@ -1,16 +1,19 @@
 {
-  "name": "figma-template-renderer",
+  "name": "creatives",
   "version": "0.1.0",
-  "description": "Self-hosted renderer that fills Figma frames with real content and exports images",
+  "description": "Creatives: self-hosted marketing creative generator that fills design templates (Figma, Canva) with real content",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "test": "node test/render-fixture.js"
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node test/render-fixture.js && node test/static-integration.js && node test/snapshot.js && node test/api-keys.js && node test/oidc.js && node test/canva.js && node test/persistence.js"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "dependencies": {
     "express": "^4.21.2",
+    "jose": "^6.2.12",
     "puppeteer-core": "^23.11.1"
   }
 }

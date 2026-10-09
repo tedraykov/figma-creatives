@@ -8,4 +8,8 @@ services:
       - "3000:3000"
     volumes:
       - ./fonts:/usr/share/fonts/custom:ro
+      - renderer-data:/app/data
     shm_size: "512mb"
+
+volumes:
+  renderer-data:

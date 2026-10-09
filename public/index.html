@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creatives</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<style>
+  /* Liquid Glass: translucent, blurred surfaces over a soft backdrop, concentric rounded
+     corners, capsule controls, system font and system accent colors. */
+  :root {
+    color-scheme: light dark;
+    --bg1:#e8e8ea; --bg2:#dedee1; --bg3:#eeeeef; /* neutral greys */
+    --glass:rgba(255,255,255,.58); --glass-hi:rgba(255,255,255,.82); --glass-solid:rgba(250,250,251,.96);
+    --stroke:rgba(255,255,255,.78); --hair:rgba(60,60,67,.16);
+    --text:#1d1d1f; --muted:#5f5f66; --accent:#0a84ff; --accent-text:#fff;
+    --fill:rgba(120,120,128,.13); --fill-hi:rgba(120,120,128,.21);
+    --danger:#ff3b30; --warn:#c77700;
+    --shadow:0 10px 40px rgba(20,20,30,.12), 0 1px 0 rgba(255,255,255,.75) inset;
+    --r-lg:28px; --r-md:20px; --r-sm:12px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro",system-ui,"Segoe UI",sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg1:#1a1a1c; --bg2:#1d1d20; --bg3:#222225;
+      --glass:rgba(48,48,52,.52); --glass-hi:rgba(66,66,71,.64); --glass-solid:rgba(34,34,38,.96);
+      --stroke:rgba(255,255,255,.13); --hair:rgba(255,255,255,.12);
+      --text:#f5f5f7; --muted:#b9b9c1; --accent:#0a84ff;
+      --fill:rgba(255,255,255,.09); --fill-hi:rgba(255,255,255,.17);
+      --danger:#ff6961; --warn:#ffb340;
+      --shadow:0 10px 40px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.09) inset;
+    }
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body {
+    margin:0; font:14px/1.45 var(--font); color:var(--text); -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(1100px 800px at 15% 0%, var(--bg3), transparent 70%),
+      linear-gradient(160deg, var(--bg1), var(--bg2)) fixed;
+    background-attachment:fixed;
+  }
+  .glass {
+    background:var(--glass); border:1px solid var(--stroke); box-shadow:var(--shadow);
+    -webkit-backdrop-filter:blur(30px) saturate(190%); backdrop-filter:blur(30px) saturate(190%);
+  }
+  button, input, select, textarea { font:inherit; color:inherit; }
+  button { cursor:pointer; }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  [hidden] { display:none !important; }
+
+  /* Toasts: closable, auto-dismissing messages. A popover keeps them in the top layer, above dialogs and overlays. */
+  #toasts { position:fixed; inset:auto; top:78px; right:16px; width:min(380px, calc(100vw - 32px)); margin:0; padding:0; border:0; background:transparent; overflow:visible; color:inherit; }
+  #toasts:popover-open { display:flex; flex-direction:column; gap:10px; }
+  .toast { position:relative; overflow:hidden; display:flex; gap:10px; align-items:flex-start; padding:12px 8px 12px 14px; border-radius:var(--r-md);
+    background:var(--glass-solid); border:1px solid var(--stroke); box-shadow:var(--shadow), 0 14px 40px rgba(0,0,0,.18);
+    -webkit-backdrop-filter:blur(30px) saturate(190%); backdrop-filter:blur(30px) saturate(190%);
+    animation:toast-in .28s cubic-bezier(.2,.8,.2,1); }
+  .toast.out { opacity:0; transform:translateY(-8px) scale(.98); transition:opacity .2s, transform .2s; }
+  .toast .dot { width:8px; height:8px; border-radius:50%; background:var(--danger); margin-top:7px; flex:none; }
+  .toast .msg { flex:1; min-width:0; word-break:break-word; font-size:13.5px; padding-top:1px; }
+  .toast .x { flex:none; width:26px; height:26px; }
+  .toast .x svg { width:15px; height:15px; }
+  .toast .bar { position:absolute; left:0; bottom:0; height:2px; width:100%; background:var(--danger); opacity:.55; transform-origin:left; animation:toast-bar linear forwards; }
+  .toast:hover .bar { animation-play-state:paused; }
+  @keyframes toast-in { from { opacity:0; transform:translateY(-10px) scale(.98); } }
+  @keyframes toast-bar { to { transform:scaleX(0); } }
+  input.invalid, select.invalid, textarea.invalid { border-color:var(--danger); box-shadow:0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent); }
+  .ferr { color:var(--danger); font-size:12px; margin:4px 2px 0; }
+  .req { color:var(--danger); margin-left:2px; }
+  .ok { color:#248a3d; } @media (prefers-color-scheme: dark) { .ok { color:#32d74b; } }
+
+  /* Controls */
+  .btn { border:0; background:var(--fill); border-radius:999px; padding:7px 15px; font-weight:500; transition:background .15s, transform .1s; }
+  .btn:hover { background:var(--fill-hi); } .btn:active { transform:scale(.97); }
+  a.btn { color:inherit; }
+  .btn.primary { background:var(--accent); color:var(--accent-text); }
+  a.btn.primary { color:var(--accent-text); }
+  .btn.primary:hover { filter:brightness(1.08); }
+  .btn.danger { color:var(--danger); }
+  .btn.small { padding:4px 11px; font-size:12.5px; }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .icon-btn { border:0; background:transparent; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; color:var(--muted); transition:background .15s, color .15s; }
+  .icon-btn:hover { background:var(--fill); color:var(--text); }
+  .icon-btn.on { background:var(--fill-hi); color:var(--text); }
+  .icon-btn svg { width:18px; height:18px; }
+  input, select, textarea {
+    width:100%; border:1px solid var(--hair); background:var(--fill); border-radius:var(--r-sm); padding:8px 11px; outline:none;
+  }
+  input:focus, select:focus, textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+  textarea { resize:vertical; min-height:64px; }
+  label.cap { display:block; font-size:12px; font-weight:600; color:var(--muted); margin:0 0 5px 2px; text-transform:uppercase; letter-spacing:.04em; }
+  .field { margin-bottom:14px; }
+  .muted { color:var(--muted); } .small { font-size:12.5px; }
+  .err { color:var(--danger); } .warn { color:var(--warn); font-size:13px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .seg { display:inline-flex; background:var(--fill); border-radius:999px; padding:3px; gap:2px; }
+  .seg button { border:0; background:transparent; border-radius:999px; padding:5px 13px; font-weight:500; color:var(--muted); }
+  .seg button.on { background:var(--glass-hi); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.14); }
+
+  /* Window layout */
+  .app { display:flex; gap:12px; height:100vh; padding:12px; }
+  .sidebar { width:248px; flex:none; border-radius:var(--r-lg); display:flex; flex-direction:column; padding:14px 10px 10px; overflow:hidden; }
+  .brand { display:flex; align-items:center; gap:9px; padding:2px 8px 14px; font-weight:700; font-size:15px; }
+  .brand .logo { width:30px; height:30px; flex:none; }
+  .side-title { font-size:12px; font-weight:600; color:var(--muted); padding:6px 10px; text-transform:uppercase; letter-spacing:.05em; display:flex; justify-content:space-between; align-items:center; }
+  .projects { flex:1; overflow:auto; display:flex; flex-direction:column; gap:2px; }
+  .proj { display:flex; align-items:center; gap:10px; width:100%; border:0; background:transparent; text-align:left; padding:8px 10px; border-radius:var(--r-sm); }
+  .proj:hover { background:var(--fill); }
+  .proj.on { background:var(--accent); color:var(--accent-text); }
+  .proj .dot { width:30px; height:30px; border-radius:9px; background:var(--fill-hi); display:grid; place-items:center; flex:none; font-weight:700; font-size:12px; }
+  .proj.on .dot { background:rgba(255,255,255,.25); }
+  .proj .txt { min-width:0; flex:1; } .proj .nm { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .proj .sub { font-size:12px; opacity:.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .proj .acts { display:none; gap:2px; } .proj:hover .acts, .proj:focus-within .acts, .proj.on .acts { display:flex; }
+  @media (hover:none) { .proj .acts { display:flex; } }
+  .proj .acts .icon-btn { width:26px; height:26px; color:inherit; } .proj .acts svg { width:15px; height:15px; }
+  .sidebar { transition:width .3s cubic-bezier(.2,.8,.2,1), padding .3s; }
+  @media (min-width:861px) {
+    .sidebar.collapsed { width:72px; padding-left:8px; padding-right:8px; }
+    .sidebar.collapsed .brand span, .sidebar.collapsed .side-title, .sidebar.collapsed .proj .txt, .sidebar.collapsed .proj .acts, .sidebar.collapsed .lbl { display:none; }
+    .sidebar.collapsed .brand { justify-content:center; padding-left:0; padding-right:0; }
+    .sidebar.collapsed .proj { justify-content:center; padding:8px 0; }
+    .sidebar.collapsed .side-foot .btn { padding:9px 0; }
+  }
+  .menu { position:fixed; z-index:40; min-width:190px; padding:6px; border-radius:var(--r-md); background:var(--glass-solid); border:1px solid var(--stroke);
+    box-shadow:var(--shadow), 0 16px 48px rgba(0,0,0,.22); -webkit-backdrop-filter:blur(30px); backdrop-filter:blur(30px); animation:menu-in .14s ease-out; }
+  .menu button { display:flex; width:100%; align-items:center; gap:9px; border:0; background:transparent; text-align:left; padding:8px 12px; border-radius:var(--r-sm); font-weight:500; }
+  .menu button:hover, .menu button:focus-visible { background:var(--accent); color:var(--accent-text); outline:none; }
+  .menu button.danger { color:var(--danger); } .menu button.danger:hover, .menu button.danger:focus-visible { background:var(--danger); color:#fff; }
+  .menu hr { border:0; border-top:1px solid var(--hair); margin:6px 4px; }
+  @keyframes menu-in { from { opacity:0; transform:translateY(-4px) scale(.98); } }
+  .side-foot { padding-top:8px; }
+  .side-foot .btn { width:100%; display:flex; align-items:center; justify-content:center; gap:6px; }
+
+  .main { flex:1; min-width:0; display:flex; flex-direction:column; gap:12px; }
+  .toolbar { border-radius:999px; display:flex; align-items:center; gap:6px; padding:6px 8px 6px 8px; flex:none; }
+  .crumbs { flex:1; min-width:0; margin-left:4px; }
+  .crumbs ol { list-style:none; margin:0; padding:0; display:flex; align-items:center; gap:2px; min-width:0; font-size:15px; }
+  .crumbs li { display:flex; align-items:center; gap:2px; min-width:0; }
+  .crumbs li + li::before { content:''; width:7px; height:7px; border-top:1.8px solid var(--muted); border-right:1.8px solid var(--muted); transform:rotate(45deg); margin:0 8px 0 4px; flex:none; opacity:.7; }
+  .crumbs .crumb { border:0; background:transparent; padding:4px 10px; border-radius:999px; font-weight:500; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .crumbs button.crumb:hover { background:var(--fill); color:var(--text); }
+  .crumbs [aria-current] { font-weight:650; color:var(--text); padding:4px 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .crumbs li:not(:last-child) { flex:0 1 auto; max-width:45%; }
+  .crumbs li:last-child { min-width:0; }
+  .content { flex:1; overflow:auto; border-radius:var(--r-lg); padding:4px; }
+  .card-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; padding:6px; }
+  .card { border-radius:var(--r-md); padding:10px; cursor:pointer; transition:transform .15s, box-shadow .15s; border:1px solid var(--stroke); background:var(--glass); -webkit-backdrop-filter:blur(24px) saturate(180%); backdrop-filter:blur(24px) saturate(180%); box-shadow:var(--shadow); }
+  .card:hover { transform:translateY(-2px); } .card:focus-visible { outline-offset:3px; }
+  .thumb { height:140px; border-radius:calc(var(--r-md) - 8px); background:var(--fill); display:flex; align-items:center; justify-content:center; overflow:hidden; margin-bottom:10px; }
+  .thumb img { max-width:100%; max-height:100%; }
+  .chip { display:inline-block; font-size:12px; padding:2px 9px; border-radius:999px; background:var(--fill); margin:3px 4px 0 0; color:var(--muted); }
+  .chip.btn { border:0; cursor:pointer; } .chip.on { background:var(--accent); color:#fff; }
+  /* Ghost cards: shimmering placeholders shown while templates load */
+  .shimmer { position:relative; overflow:hidden; background:var(--fill); }
+  .shimmer::after { content:''; position:absolute; inset:0; transform:translateX(-100%);
+    background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 9%, transparent), transparent); animation:shimmer 1.4s ease-in-out infinite; }
+  @keyframes shimmer { to { transform:translateX(100%); } }
+  .ghost { cursor:default; pointer-events:none; }
+  .ghost:hover { transform:none; }
+  .ghost .line { height:14px; border-radius:7px; margin-bottom:8px; }
+  .ghost .chips { display:flex; gap:6px; }
+  .ghost .chips i { display:block; height:20px; width:44px; border-radius:999px; }
+  @media (prefers-reduced-motion: reduce) { .shimmer::after { animation:none; } }
+  .empty { text-align:center; padding:60px 20px; } .empty h2 { margin:0 0 6px; }
+
+  .editor { display:grid; grid-template-columns:minmax(280px,380px) 1fr; gap:14px; padding:6px; align-items:start; }
+  @media (max-width:980px) { .editor { grid-template-columns:1fr; } }
+  .pane { border-radius:var(--r-lg); padding:18px; }
+  .stage { border-radius:var(--r-lg); min-height:260px; display:flex; align-items:center; justify-content:center; padding:18px; position:relative;
+    background:repeating-conic-gradient(var(--fill) 0 25%, transparent 0 50%) 0 0/18px 18px; }
+  .stage .busy { position:absolute; top:12px; right:16px; }
+  .stage iframe { box-shadow:0 8px 30px rgba(0,0,0,.28); border-radius:4px; }
+  .field-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+  .field-head b { font-size:13px; } .field-head label { font-size:12.5px; color:var(--muted); display:flex; gap:5px; align-items:center; }
+  .field-head input { width:auto; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  pre { background:var(--fill); padding:12px; border-radius:var(--r-sm); overflow:auto; font-size:12px; }
+
+  /* Settings: a floating panel over the page (all screen sizes), with a dimmed backdrop */
+  .settings { background:var(--glass-solid); position:fixed; z-index:21; top:12px; right:12px; bottom:12px; width:min(392px, calc(100vw - 24px)); overflow:hidden; border-radius:var(--r-lg);
+    opacity:0; visibility:hidden; pointer-events:none; transform:translateX(28px) scale(.98);
+    transition:transform .32s cubic-bezier(.2,.8,.2,1), opacity .25s, visibility 0s .32s; }
+  .settings.open { opacity:1; visibility:visible; pointer-events:auto; transform:none; transition:transform .32s cubic-bezier(.2,.8,.2,1), opacity .25s, visibility 0s; }
+  .settings-in { width:100%; height:100%; overflow:auto; padding:18px 16px 24px; }
+  .settings h2 { margin:0 0 4px; font-size:20px; }
+  .group { background:var(--fill); border-radius:var(--r-md); padding:6px; margin:6px 0 16px; }
+  .group .item { padding:10px; border-radius:var(--r-sm); }
+  .group .item + .item { border-top:1px solid var(--hair); border-radius:0; }
+  .item .top { display:flex; align-items:center; gap:10px; }
+  .item:has([data-act=edit]) .top { cursor:pointer; }
+  .item .grow { flex:1; min-width:0; } .item .nm { font-weight:600; } .item .sub { font-size:12px; color:var(--muted); }
+  .plogo { width:18px; height:18px; object-fit:contain; flex:none; vertical-align:-3px; margin-right:7px; }
+  .proj .dot img { width:20px; height:20px; object-fit:contain; margin:0; }
+  .seg button .plogo { margin:0; width:20px; height:20px; vertical-align:middle; }
+  .badge { font-size:11px; padding:1px 8px; border-radius:999px; background:var(--fill-hi); color:var(--muted); }
+  .edit { margin-top:10px; }
+  .settings .sec { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; padding:0 6px; margin-top:18px; }
+
+  dialog { border:1px solid var(--stroke); background:var(--glass-solid); color:var(--text); border-radius:var(--r-lg); padding:22px; width:min(460px, calc(100vw - 32px)); box-shadow:0 24px 80px rgba(0,0,0,.35);
+    -webkit-backdrop-filter:blur(40px) saturate(200%); backdrop-filter:blur(40px) saturate(200%); }
+  dialog::backdrop { background:rgba(0,0,0,.25); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); }
+  dialog h2 { margin:0 0 14px; font-size:19px; }
+  .actions { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
+
+  body.overlay-open .scrim { display:block; }
+  .scrim { display:none; position:fixed; inset:0; z-index:19; background:rgba(0,0,0,.28); -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); }
+  .settings-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .settings-head h2 { margin:0; }
+
+  /* Narrow windows: the project sidebar and settings become overlays */
+  @media (max-width:860px) {
+    .sidebar { position:fixed; z-index:20; left:12px; top:12px; bottom:12px; transform:translateX(-120%); transition:transform .3s; }
+    .sidebar.open { transform:none; }
+  }
+</style>
+</head>
+<body>
+<div class="scrim" id="scrim"></div>
+<div id="toasts" popover="manual" aria-live="assertive"></div>
+<div class="app">
+  <aside class="sidebar glass" id="sidebar">
+    <div class="brand"><svg class="logo" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M23.78 8.22A11 11 0 1 0 23.78 23.78" stroke="var(--accent)" stroke-width="3.6" stroke-linecap="round"/><circle cx="24.6" cy="16" r="2.7" fill="#ff5c7a"/></svg><span>Creatives</span></div>
+    <div class="side-title"><span>Projects</span></div>
+    <nav class="projects" id="projects" aria-label="Projects"></nav>
+    <div class="side-foot"><button class="btn primary" id="linkBtn" title="Link project" aria-label="Link project">＋<span class="lbl"> Link project</span></button></div>
+  </aside>
+
+  <section class="main">
+    <header class="toolbar glass">
+      <button class="icon-btn" id="sideToggle" aria-label="Toggle projects"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4.5" width="18" height="15" rx="4"/><path d="M9.5 4.5v15"/></svg></button>
+      <button class="icon-btn" id="back" hidden aria-label="Back to templates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <nav class="crumbs" aria-label="Breadcrumb"><ol id="crumbs"></ol></nav>
+      <a class="btn small" id="openSrc" hidden target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;margin-right:4px">
+        <img id="openSrcLogo" class="plogo" alt="" style="margin:0"><span id="openSrcLabel">Open original</span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"/></svg></a>
+      <button class="icon-btn" id="reload" aria-label="Reload templates" title="Reload from source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7"/></svg></button>
+      <button class="icon-btn" id="settingsBtn" aria-label="Settings" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg></button>
+    </header>
+
+    <div class="content" id="content">
+      <div id="listState" hidden></div>
+      <div class="card-grid" id="cards" hidden></div>
+
+      <div id="editor" hidden>
+        <div class="editor">
+          <div class="pane glass">
+            <div id="ratioChips" style="margin-bottom:14px"></div>
+            <div id="fields"></div>
+            <div class="row" style="flex-wrap:wrap">
+              <div class="seg" id="fmtSeg"><button data-v="png" class="on">PNG</button><button data-v="jpg">JPG</button><button data-v="webp">WebP</button></div>
+              <div class="seg" id="scaleSeg"><button data-v="1" class="on">1×</button><button data-v="2">2×</button></div>
+              <button class="btn primary" id="render" style="margin-left:auto">Download</button>
+            </div>
+            <p id="warnings" class="warn"></p>
+            <details><summary>Request body (for n8n)</summary><pre id="payload"></pre><button class="btn small" id="copy">Copy</button></details>
+          </div>
+          <div>
+            <div class="stage" id="stage"><span class="busy muted small" id="busy" hidden>Working…</span><div id="pvWrap" style="overflow:hidden"><img id="pvImg" alt="Preview" hidden style="display:block;max-width:100%;max-height:74vh;box-shadow:0 8px 30px rgba(0,0,0,.28);border-radius:4px"><iframe id="pv" sandbox="allow-scripts" title="Preview" style="border:0;display:block;transform-origin:0 0;background:transparent"></iframe></div></div>
+            <div class="row small muted" style="margin:8px 6px"><span id="meta"></span><button class="btn small" id="pvBtn" hidden style="margin-left:auto">Generate preview</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="settings glass" id="settings" aria-label="Settings">
+    <div class="settings-in">
+      <div class="settings-head"><h2>Settings</h2><button class="icon-btn" id="settingsClose" aria-label="Close settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+      <div class="sec">Integrations</div>
+      <p class="muted small" style="margin:2px 6px 0">Credentials for a template source. Link projects to an integration, so tokens are entered once.</p>
+      <div class="group" id="integList"></div>
+      <div class="group" style="padding:12px">
+        <div class="field"><label class="cap">New integration</label>
+          <div class="seg" id="niType"><button data-v="figma" class="on" aria-label="Figma" title="Figma"><img class="plogo" src="/logos/figma.svg" alt=""></button><button data-v="canva" aria-label="Canva" title="Canva"><img class="plogo" src="/logos/canva.svg" alt=""></button></div></div>
+        <div class="field"><label class="cap" for="niName">Name<span class="req">*</span></label><input id="niName" placeholder="Name, e.g. Marketing team" autocomplete="off"></div>
+        <div id="niFigma"><div class="field"><label class="cap" for="niToken">Personal access token<span class="req">*</span></label><input id="niToken" type="password" autocomplete="off" placeholder="figd_…  (scope: file_content:read)"></div></div>
+        <div id="niCanva" hidden>
+          <div class="field"><label class="cap" for="niClientId">Client ID<span class="req">*</span></label><input id="niClientId" autocomplete="off" placeholder="From the Canva developer portal"></div>
+          <div class="field"><label class="cap" for="niClientSecret">Client secret<span class="req">*</span></label><input id="niClientSecret" type="password" autocomplete="off"></div>
+          <div class="field"><label class="cap">Redirect URL to register in Canva</label><div class="row"><input id="niRedirect" readonly style="font-size:12px"><button class="btn small" id="niRedirectCopy" type="button">Copy</button></div>
+            <p class="small muted" style="margin:6px 2px 0">Needs a Canva Enterprise account for autofill. After adding, click Connect.</p></div>
+        </div>
+        <div class="row"><button class="btn primary small" id="niAdd">Add integration</button><span id="niMsg" class="small"></span></div>
+      </div>
+
+      <div class="sec">API keys</div>
+      <p class="muted small" style="margin:2px 6px 0">For n8n and other automation: send a key as <code>Authorization: Bearer &lt;key&gt;</code> (n8n: Header Auth credential). Create one per client so each can be revoked on its own. A key is shown only once, when created.</p>
+      <div class="group" id="keyList"></div>
+      <div class="group" style="padding:12px">
+        <div class="field"><label class="cap" for="kName">New API key<span class="req">*</span></label><input id="kName" placeholder="Name, e.g. n8n production" autocomplete="off" required maxlength="60"></div>
+        <div class="row"><button class="btn primary small" id="kAdd">Create key</button><span id="kMsg" class="small"></span></div>
+      </div>
+
+      <div class="sec">Renderer</div>
+      <div class="group">
+        <div class="item"><div class="top"><div class="grow"><div class="nm">Cache</div><div class="sub">Re-read designs on the next request</div></div><button class="btn small" id="clearCache">Clear</button></div></div>
+        <div class="item"><div class="top"><div class="grow"><div class="nm" id="acctName">Account</div><div class="sub" id="acctSub"></div></div><a class="btn small" id="signOut" href="/auth/logout" style="text-decoration:none">Sign out</a></div></div>
+      </div>
+      <p id="settingsMsg" class="small muted" style="padding:0 6px"></p>
+    </div>
+  </aside>
+</div>
+
+<dialog id="linkDlg">
+  <h2>Link a project</h2>
+  <form method="dialog" id="linkForm">
+    <div class="field"><label class="cap" for="lkInteg">Integration</label><div class="row"><img id="lkLogo" class="plogo" alt="" style="margin:0;width:24px;height:24px"><select id="lkInteg"></select></div>
+      <p class="small muted" id="lkNoInteg" hidden style="margin:6px 2px 0">No integration yet. <a href="#" id="lkOpenSettings">Add one in Settings</a>.</p></div>
+    <div class="field"><label class="cap" for="lkLink" id="lkLabel">Link</label><input id="lkLink" autocomplete="off"></div>
+    <div class="field"><label class="cap" for="lkName">Name (optional)</label><input id="lkName" placeholder="Defaults to the file name" autocomplete="off"></div>
+    <p id="lkErr" class="muted small"></p>
+    <div class="actions"><button type="button" class="btn" id="lkCancel">Cancel</button><button class="btn primary" id="lkGo">Link project</button></div>
+  </form>
+</dialog>
+
+<div class="menu" id="projMenu" role="menu" hidden></div>
+
+<dialog id="renameDlg">
+  <h2>Rename project</h2>
+  <form method="dialog" id="renameForm">
+    <div class="field"><label class="cap" for="rnName">Name<span class="req">*</span></label><input id="rnName" maxlength="60" autocomplete="off"></div>
+    <div class="actions"><button type="button" class="btn" id="rnCancel">Cancel</button><button class="btn primary" id="rnSave">Save</button></div>
+  </form>
+</dialog>
+
+<dialog id="keyDlg">
+  <h2>Copy your new API key</h2>
+  <p class="muted" style="margin-top:0">This is the only time the key for <b id="keyDlgName"></b> will be shown. It is not stored in a readable form, so it can't be viewed again. If you lose it, revoke it and create a new one.</p>
+  <div class="row" style="margin-bottom:14px"><input id="newKeyVal" readonly aria-label="New API key" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px"><button class="btn primary" id="kCopy" type="button">Copy</button></div>
+  <label class="row small" style="gap:8px;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="kConfirm" style="width:auto"> I have copied the key and stored it somewhere safe</label>
+  <div class="actions"><button class="btn primary" id="kDone" disabled>Done</button></div>
+</dialog>
+
+<dialog id="signInDlg">
+  <h2>Sign in to Creatives</h2>
+  <p id="signInMsg" class="muted" style="margin-top:0"></p>
+  <div class="actions"><a class="btn primary" id="signInBtn" href="/auth/login" style="text-decoration:none">Continue</a></div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (id, on) => ($(id).hidden = !on);
+const TYPE_LABEL = { figma: 'Figma', canva: 'Canva', static: 'Static samples' };
+const logo = (type, cls = 'plogo') => `<img class="${cls}" src="/logos/${esc(type)}.svg" alt="${esc(TYPE_LABEL[type] ?? type)}" title="${esc(TYPE_LABEL[type] ?? type)}">`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let cfg = null, projectId = '', index = null, sel = null, timer = null, reqId = 0, inflight = null;
+let fmt = 'png', scale = 1;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+  if (res.status === 401) { showSignIn(); throw new Error('Sign in required'); }
+  if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error || m; } catch {} throw new Error(m); }
+  return res;
+}
+/* ---------- toasts ---------- */
+const ERROR_MS = 8000;
+function toast(message, { ms = ERROR_MS } = {}) {
+  const box = $('toasts');
+  // A modal dialog makes everything outside it inert, so while one is open the toasts live inside it (still clickable).
+  const host = document.querySelector('dialog[open]') ?? document.body;
+  if (box.parentElement !== host) host.append(box);
+  // Same message again: restart the existing toast instead of stacking duplicates.
+  const dupe = [...box.children].find((t) => t.dataset.msg === message);
+  if (dupe) dupe.remove();
+  while (box.children.length >= 4) box.firstElementChild.remove();
+  const el = document.createElement('div');
+  el.className = 'toast'; el.dataset.msg = message; el.setAttribute('role', 'alert');
+  el.innerHTML = `<span class="dot"></span><div class="msg"></div>
+    <button class="icon-btn x" aria-label="Dismiss"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <span class="bar" style="animation-duration:${ms}ms"></span>`;
+  el.querySelector('.msg').textContent = message;
+  let timer;
+  const close = () => { clearTimeout(timer); el.classList.add('out'); setTimeout(() => { el.remove(); if (!box.children.length) box.hidePopover?.(); }, 200); };
+  const arm = (left) => { clearTimeout(timer); timer = setTimeout(close, left); el.dataset.start = Date.now(); el.dataset.left = left; };
+  el.querySelector('.x').onclick = close;
+  el.onmouseenter = () => { clearTimeout(timer); el.dataset.left = Math.max(1500, el.dataset.left - (Date.now() - el.dataset.start)); }; // hovering pauses the countdown
+  el.onmouseleave = () => arm(Number(el.dataset.left));
+  box.append(el); arm(ms);
+  // Re-open the popover so it sits above any modal dialog that is currently showing.
+  box.hidePopover?.(); box.showPopover?.();
+}
+document.addEventListener('close', (e) => { if (e.target.tagName === 'DIALOG' && $('toasts').parentElement === e.target) document.body.append($('toasts')); }, true);
+const fail = (e) => { if (e?.name !== 'AbortError') toast(e?.message || String(e)); };
+
+const send = (method, path, body) => api(path, { method, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json());
+
+/* ---------- boot & sign-in ---------- */
+async function showSignIn() {
+  if ($('signInDlg').open) return;
+  const me = await fetch('/auth/me').then((r) => r.json()).catch(() => ({}));
+  $('signInMsg').textContent = me.configured === false
+    ? 'Sign-in is not configured on this server yet. Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and ALLOWED_EMAILS (see the README), then reload.'
+    : 'Sign in with your account to manage templates, integrations and API keys.';
+  $('signInBtn').hidden = me.configured === false;
+  $('signInDlg').addEventListener('cancel', (e) => e.preventDefault());
+  $('signInDlg').showModal();
+}
+
+async function boot() {
+  const me = await fetch('/auth/me');
+  if (me.status === 401) return showSignIn();
+  const user = await me.json();
+  $('acctName').textContent = user.name || user.email;
+  $('acctSub').textContent = user.authDisabled ? 'Sign-in is disabled on this server' : user.email;
+  $('signOut').hidden = Boolean(user.authDisabled);
+  try { cfg = await (await api('/config')).json(); } catch (e) { if (e.message !== 'Sign in required') fail(e); return; }
+  renderSidebar(); renderSettings();
+  if (!cfg.projects.some((p) => p.id === projectId)) projectId = cfg.defaultProjectId;
+  openProject(projectId);
+}
+
+/* ---------- sidebar: projects ---------- */
+const initials = (n) => n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+const integType = (id) => cfg.integrations.find((i) => i.id === id)?.type;
+const integName = (id) => cfg.integrations.find((i) => i.id === id)?.name ?? '';
+
+function renderSidebar() {
+  $('projects').innerHTML = cfg.projects.map((p) => `
+    <button class="proj ${p.id === projectId ? 'on' : ''}" data-id="${esc(p.id)}" title="${esc(p.name)}">
+      <span class="dot">${integType(p.integrationId) ? logo(integType(p.integrationId)) : esc(initials(p.name))}</span>
+      <span class="txt"><div class="nm">${esc(p.name)}</div><div class="sub">${esc(integName(p.integrationId))}${p.id === cfg.defaultProjectId ? ' · default' : ''}</div></span>
+      <span class="acts"><span class="icon-btn" role="button" tabindex="0" data-act="menu" title="Project options" aria-label="Project options" aria-haspopup="menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></span></span>
+    </button>`).join('');
+}
+
+async function removeProjectFlow(id) {
+  const p = cfg.projects.find((x) => x.id === id); if (!p) return;
+  const note = p.id === 'env' ? '\n\nIt comes from the FIGMA_FILE_KEY variable, so it is only hidden inside the app.' : p.id === 'static' ? '\n\nYou can bring the demo samples back from Settings.' : '';
+  if (!confirm(`Remove the project "${p.name}"?\n\nIts templates stay where they are (Figma, Canva); they just stop being listed here.${note}`)) return;
+  try { cfg = await send('DELETE', `/projects/${id}`); } catch (er) { return fail(er); }
+  renderSidebar(); renderSettings();
+  if (id === projectId || !cfg.projects.some((x) => x.id === projectId)) openProject(cfg.defaultProjectId);
+}
+/* ---------- project menu: rename, make default, delete ---------- */
+let menuFor = null;
+function closeMenu() { $('projMenu').hidden = true; menuFor = null; }
+function openMenu(id, anchor) {
+  const p = cfg.projects.find((x) => x.id === id); if (!p) return;
+  menuFor = id;
+  $('projMenu').innerHTML = `<button role="menuitem" data-m="rename">Rename…</button>
+    ${p.id === cfg.defaultProjectId ? '' : '<button role="menuitem" data-m="default">Make default</button>'}
+    <hr><button role="menuitem" class="danger" data-m="delete">Delete project…</button>`;
+  const r = anchor.getBoundingClientRect(), m = $('projMenu');
+  m.hidden = false;
+  m.style.left = `${Math.min(r.left, innerWidth - m.offsetWidth - 12)}px`;
+  m.style.top = `${Math.min(r.bottom + 6, innerHeight - m.offsetHeight - 12)}px`;
+  m.querySelector('button').focus();
+}
+$('projMenu').onclick = async (e) => {
+  const act = e.target.closest('[data-m]')?.dataset.m, id = menuFor; if (!act) return;
+  closeMenu();
+  if (act === 'delete') return removeProjectFlow(id);
+  if (act === 'rename') return openRename(id);
+  if (act === 'default') { try { cfg = await send('PUT', `/projects/${id}`, { default: true }); renderSidebar(); } catch (er) { fail(er); } }
+};
+$('projMenu').onkeydown = (e) => {
+  const items = [...$('projMenu').querySelectorAll('button')], i = items.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown') { items[(i + 1) % items.length].focus(); e.preventDefault(); }
+  if (e.key === 'ArrowUp') { items[(i - 1 + items.length) % items.length].focus(); e.preventDefault(); }
+};
+document.addEventListener('click', (e) => { if (!$('projMenu').hidden && !e.target.closest('#projMenu') && !e.target.closest('[data-act=menu]')) closeMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('projMenu').hidden) { closeMenu(); e.stopPropagation(); } }, true);
+window.addEventListener('resize', closeMenu);
+$('content').addEventListener('scroll', closeMenu); $('projects').addEventListener('scroll', closeMenu);
+
+let renaming = null;
+function openRename(id) {
+  renaming = id; const p = cfg.projects.find((x) => x.id === id);
+  clearErr($('rnName')); $('rnName').value = p?.name ?? ''; $('renameDlg').showModal(); $('rnName').select();
+}
+$('rnCancel').onclick = () => $('renameDlg').close();
+$('renameForm').onsubmit = async (e) => {
+  e.preventDefault();
+  if (!validate([[$('rnName'), 'A name is required']])) return;
+  try {
+    cfg = await send('PUT', `/projects/${renaming}`, { name: $('rnName').value });
+    $('renameDlg').close(); renderSidebar(); setCrumbs();
+  } catch (er) { fail(er); }
+};
+
+$('projects').onclick = async (e) => {
+  const row = e.target.closest('.proj'); if (!row) return;
+  const id = row.dataset.id;
+  if (e.target.closest('[data-act=menu]')) { menuFor === id ? closeMenu() : openMenu(id, e.target.closest('[data-act=menu]')); return; }
+  closeMenu();
+  openProject(id); $('sidebar').classList.remove('open'); syncScrim();
+};
+$('projects').onkeydown = (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset.act === 'menu') { e.preventDefault(); e.target.click(); } };
+
+// The sidebar collapses to an icon rail on desktop (remembered), and slides over the page on narrow windows.
+const narrow = () => matchMedia('(max-width:860px)').matches;
+try { $('sidebar').classList.toggle('collapsed', localStorage.getItem('sidebar') === 'collapsed'); } catch {}
+$('sideToggle').onclick = () => {
+  if (narrow()) { $('sidebar').classList.toggle('open'); if ($('sidebar').classList.contains('open')) setSettings(false); return syncScrim(); }
+  const c = $('sidebar').classList.toggle('collapsed');
+  try { localStorage.setItem('sidebar', c ? 'collapsed' : 'open'); } catch {}
+};
+
+/* ---------- link project sheet ---------- */
+$('linkBtn').onclick = () => {
+  const linkable = cfg.integrations.filter((i) => i.type !== 'static');
+  $('lkInteg').innerHTML = linkable.map((i) => `<option value="${esc(i.id)}">${esc(i.name)}</option>`).join('');
+  $('lkInteg').disabled = !linkable.length; show('lkNoInteg', !linkable.length); $('lkGo').disabled = !linkable.length;
+  syncLinkField();
+  $('lkErr').textContent = ''; $('lkLink').value = ''; $('lkName').value = '';
+  $('linkDlg').showModal(); $('lkLink').focus();
+};
+// The link field adapts to the chosen integration (a Figma file link, a Canva template filter, ...).
+function syncLinkField() {
+  const t = integType($('lkInteg').value); $('lkLogo').hidden = !t; if (t) $('lkLogo').src = `/logos/${t}.svg`;
+  const hint = cfg.integrations.find((i) => i.id === $('lkInteg').value)?.linkHint;
+  $('lkLabel').textContent = hint?.label ?? 'Link';
+  $('lkLink').placeholder = hint?.placeholder ?? ''; $('lkLink').required = Boolean(hint?.required);
+}
+$('lkInteg').onchange = syncLinkField;
+$('lkCancel').onclick = () => $('linkDlg').close();
+$('lkOpenSettings').onclick = (e) => { e.preventDefault(); $('linkDlg').close(); setSettings(true); $('niName').focus(); };
+$('linkForm').onsubmit = async (e) => {
+  e.preventDefault(); $('lkGo').disabled = true; $('lkErr').textContent = 'Checking the link…';
+  const before = new Set(cfg.projects.map((p) => p.id));
+  try {
+    cfg = await send('POST', '/projects', { link: $('lkLink').value, integrationId: $('lkInteg').value, name: $('lkName').value });
+    const added = cfg.projects.find((p) => !before.has(p.id));
+    $('linkDlg').close(); renderSidebar(); renderSettings(); if (added) openProject(added.id);
+  } catch (er) { $('lkErr').textContent = ''; fail(er); }
+  finally { $('lkGo').disabled = false; }
+};
+
+/* ---------- settings sidebar ---------- */
+const syncScrim = () => document.body.classList.toggle('overlay-open', $('settings').classList.contains('open') || (narrow() && $('sidebar').classList.contains('open')));
+function setSettings(open) {
+  $('settings').classList.toggle('open', open);
+  if (open && narrow()) $('sidebar').classList.remove('open');
+  syncScrim();
+  $('settingsBtn').classList.toggle('on', open); $('settingsBtn').setAttribute('aria-expanded', open);
+}
+$('settingsClose').onclick = () => setSettings(false);
+$('scrim').onclick = () => { $('sidebar').classList.remove('open'); setSettings(false); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.querySelector('dialog[open]')) { $('sidebar').classList.remove('open'); setSettings(false); } });
+$('settingsBtn').onclick = () => setSettings(!$('settings').classList.contains('open'));
+
+/* ---------- form validation ---------- */
+function setErr(input, msg) {
+  input.classList.add('invalid'); input.setAttribute('aria-invalid', 'true');
+  let e = input.parentElement.querySelector(':scope > .ferr');
+  if (!e) { e = document.createElement('div'); e.className = 'ferr'; input.closest('.row') ? input.closest('.row').insertAdjacentElement('afterend', e) : input.insertAdjacentElement('afterend', e); }
+  e.textContent = msg;
+}
+function clearErr(input) { input.classList.remove('invalid'); input.removeAttribute('aria-invalid'); input.parentElement.querySelector(':scope > .ferr')?.remove(); }
+// rules: [[input, message]]. Marks every empty field, focuses the first, and says whether all were filled.
+function validate(rules) {
+  let first = null;
+  for (const [el, msg] of rules) { if (!el.value.trim()) { setErr(el, msg); first ??= el; } else clearErr(el); }
+  first?.focus();
+  return !first;
+}
+document.addEventListener('input', (e) => { if (e.target.classList?.contains('invalid') && e.target.value.trim()) clearErr(e.target); });
+
+const openEdits = new Set(); // integration ids whose edit panel is open, kept across re-renders
+function renderSettings() {
+  $('integList').innerHTML = cfg.integrations.map((i) => {
+    const used = cfg.projects.filter((p) => p.integrationId === i.id).length;
+    const sub = i.type === 'static' ? 'Built-in demo templates, no account needed'
+      : i.type === 'canva' ? `${i.connected ? 'Connected' : 'Not connected'} · ${used} project${used === 1 ? '' : 's'}`
+      : `Token ${esc(i.tokenHint)} · ${used} project${used === 1 ? '' : 's'}${i.fromEnv ? ' · from FIGMA_TOKEN env var' : ''}`;
+    const connect = i.type === 'canva' ? `<a class="btn small ${i.connected ? '' : 'primary'}" href="/integrations/${esc(i.id)}/connect" style="text-decoration:none">${i.connected ? 'Reconnect' : 'Connect'}</a>` : '';
+    const fields = i.type === 'canva'
+      ? `<div class="field"><label class="cap">Client ID<span class="req">*</span></label><input data-f="clientId" value="${esc(i.clientId || '')}"></div>
+         <div class="field"><label class="cap">Replace client secret</label><input data-f="clientSecret" type="password" autocomplete="off" placeholder="Leave empty to keep it"></div>`
+      : `<div class="field"><label class="cap">Replace token</label><input data-f="token" type="password" autocomplete="off" placeholder="Leave empty to keep ${esc(i.tokenHint)}"></div>`;
+    return `<div class="item" data-id="${esc(i.id)}">
+      <div class="top"><div class="grow"><div class="nm">${logo(i.type)}${esc(i.name)}</div><div class="sub">${sub}</div></div>
+        ${i.type === 'static' && cfg.samplesHidden ? '<button class="btn small" data-act="restore">Restore project</button>' : ''}
+        ${i.builtin ? '' : `${connect}<button class="btn small" data-act="edit">${openEdits.has(i.id) ? 'Close' : 'Edit'}</button>`}</div>
+      <div class="edit" ${openEdits.has(i.id) ? '' : 'hidden'}>
+        <div class="field"><label class="cap">Name<span class="req">*</span></label><input data-f="name" value="${esc(i.name)}"></div>${fields}
+        <div class="row"><button class="btn primary small" data-act="save">Save</button><button class="btn danger small" data-act="delete">Delete</button><span class="small err" data-f="msg"></span></div>
+      </div></div>`;
+  }).join('');
+}
+$('integList').onclick = async (e) => {
+  const item = e.target.closest('.item');
+  if (!item) return;
+  // Clicking an integration's name row also opens its editor.
+  if (!e.target.closest('button, a, input') && e.target.closest('.top') && item.querySelector('[data-act=edit]')) return item.querySelector('[data-act=edit]').click();
+  const act = e.target.dataset.act; if (!act) return;
+  const id = item.dataset.id, msg = item.querySelector('[data-f=msg]');
+  const field = (f) => item.querySelector(`[data-f=${f}]`);
+  if (act === 'edit') {
+    const ed = item.querySelector('.edit'); ed.hidden = !ed.hidden;
+    ed.hidden ? openEdits.delete(id) : openEdits.add(id);
+    e.target.textContent = ed.hidden ? 'Edit' : 'Close'; return;
+  }
+  try {
+    if (act === 'restore') { // bring back the demo project that was removed from the sidebar
+      cfg = await send('POST', '/projects/restore-samples'); renderSidebar(); renderSettings();
+      if (!projectId) openProject(cfg.defaultProjectId);
+      return;
+    }
+    if (act === 'save') {
+      const rules = [[field('name'), 'A name is required']];
+      if (field('clientId')) rules.push([field('clientId'), 'A client ID is required']);
+      if (!validate(rules)) return;
+      cfg = await send('PUT', `/integrations/${id}`, { name: field('name').value, token: field('token')?.value, clientId: field('clientId')?.value, clientSecret: field('clientSecret')?.value });
+      renderSidebar(); renderSettings();
+      const again = $('integList').querySelector(`[data-id="${id}"] [data-f=msg]`); // the list was redrawn
+      if (again) { again.className = 'small ok'; again.textContent = 'Saved.'; }
+      return;
+    }
+    if (act === 'delete') {
+      const name = cfg.integrations.find((i) => i.id === id)?.name ?? 'this integration';
+      const gone = cfg.projects.filter((p) => p.integrationId === id);
+      const detail = gone.length ? `\n\nThis also removes ${gone.length} project${gone.length === 1 ? '' : 's'}: ${gone.map((p) => p.name).join(', ')}. The templates themselves are not touched.` : '';
+      if (!confirm(`Delete "${name}"?${detail}`)) return;
+      cfg = await send('DELETE', `/integrations/${id}`); openEdits.delete(id);
+      renderSidebar(); renderSettings();
+      if (!cfg.projects.some((p) => p.id === projectId)) openProject(cfg.defaultProjectId); // the open project was one of them
+    }
+  } catch (er) { fail(er); }
+};
+let niType = 'figma';
+$('niRedirect').value = `${location.origin}/integrations/canva/callback`;
+$('niRedirectCopy').onclick = () => navigator.clipboard?.writeText($('niRedirect').value);
+$('niType').onclick = (e) => {
+  const v = e.target.dataset.v; if (!v) return; niType = v;
+  [...$('niType').children].forEach((b) => b.classList.toggle('on', b === e.target));
+  show('niFigma', v === 'figma'); show('niCanva', v === 'canva');
+  ['niName', 'niToken', 'niClientId', 'niClientSecret'].forEach((id) => clearErr($(id))); $('niName').placeholder = v === 'canva' ? 'Name, e.g. Brand Canva' : 'Name, e.g. Marketing team';
+};
+$('niAdd').onclick = async () => {
+  const rules = [[$('niName'), 'Enter a name'], ...(niType === 'canva'
+    ? [[$('niClientId'), 'Enter the client ID'], [$('niClientSecret'), 'Enter the client secret']]
+    : [[$('niToken'), 'Enter the access token']])];
+  if (!validate(rules)) { $('niMsg').textContent = ''; return; }
+  $('niMsg').className = 'small muted'; $('niMsg').textContent = 'Saving…';
+  try {
+    const body = { type: niType, name: $('niName').value, token: $('niToken').value, clientId: $('niClientId').value, clientSecret: $('niClientSecret').value };
+    cfg = await send('POST', '/integrations', body);
+    for (const id of ['niName', 'niToken', 'niClientId', 'niClientSecret']) $(id).value = '';
+    $('niMsg').className = 'small ok'; $('niMsg').textContent = niType === 'canva' ? 'Added. Click Connect above.' : 'Added.'; renderSettings();
+  } catch (er) { $('niMsg').textContent = ''; fail(er); }
+};
+
+/* ---------- API keys ---------- */
+const when = (iso) => (iso ? new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'never');
+function renderKeys(list) {
+  $('keyList').innerHTML = list.keys.length ? list.keys.map((k) => `<div class="item" data-id="${esc(k.id)}"><div class="top">
+    <div class="grow"><div class="nm">${esc(k.name)}</div><div class="sub">fr_…${esc(k.hint)} · created ${esc(when(k.createdAt))} · last used ${esc(when(k.lastUsedAt))}</div></div>
+    <button class="btn danger small" data-act="revoke">Revoke</button></div></div>`).join('')
+    : '<div class="item"><div class="sub">No keys yet. n8n can\'t use the API until you create one.</div></div>';
+}
+async function loadKeys() { try { renderKeys(await (await api('/api-keys')).json()); } catch {} }
+$('keyList').onclick = async (e) => {
+  if (e.target.dataset.act !== 'revoke') return;
+  if (!confirm('Revoke this key? Clients using it stop working immediately.')) return;
+  try { renderKeys(await send('DELETE', `/api-keys/${e.target.closest('.item').dataset.id}`)); $('kMsg').textContent = ''; }
+  catch (er) { fail(er); }
+};
+$('kAdd').onclick = async () => {
+  if (!validate([[$('kName'), 'Give the key a name']])) return;
+  $('kMsg').className = 'small muted'; $('kMsg').textContent = '';
+  try {
+    const r = await send('POST', '/api-keys', { name: $('kName').value });
+    const name = r.keys.find((k) => k.id === r.created)?.name ?? $('kName').value;
+    $('kName').value = ''; renderKeys(r); showNewKey(name, r.key);
+  } catch (er) { fail(er); }
+};
+$('kName').onkeydown = (e) => { if (e.key === 'Enter') $('kAdd').click(); };
+// The key exists only in this dialog. It can't be dismissed until the user confirms they copied it.
+function showNewKey(name, key) {
+  $('keyDlgName').textContent = name; $('newKeyVal').value = key;
+  $('kConfirm').checked = false; $('kDone').disabled = true; $('kCopy').textContent = 'Copy';
+  $('keyDlg').showModal(); $('newKeyVal').select();
+}
+$('keyDlg').addEventListener('cancel', (e) => e.preventDefault()); // Escape does not dismiss it
+$('kCopy').onclick = async () => {
+  $('newKeyVal').select();
+  try { await navigator.clipboard.writeText($('newKeyVal').value); $('kCopy').textContent = 'Copied'; }
+  catch { document.execCommand('copy'); $('kCopy').textContent = 'Copied'; }
+};
+$('kConfirm').onchange = () => { $('kDone').disabled = !$('kConfirm').checked; };
+$('kDone').onclick = () => { $('newKeyVal').value = ''; $('keyDlg').close(); };
+$('settingsBtn').addEventListener('click', loadKeys);
+
+$('clearCache').onclick = async () => { await api('/cache/clear', { method: 'POST' }); $('settingsMsg').textContent = 'Cache cleared.'; };
+
+/* ---------- templates ---------- */
+async function openProject(id) {
+  projectId = id; renderSidebar();
+  if (!id) { // every project has been removed
+    setCrumbs(); showList(); show('cards', false); show('reload', false);
+    $('listState').innerHTML = '<div class="empty"><h2>No projects yet</h2><p class="muted">Link a Figma file or a Canva template set to start.</p><button class="btn primary" id="emptyLink">Link project</button></div>'; show('listState', true);
+    $('emptyLink').onclick = () => $('linkBtn').click(); return;
+  }
+  const p = cfg.projects.find((x) => x.id === id);
+  setCrumbs();
+  showList();
+  // Ghost cards stand in for the templates until they arrive.
+  show('listState', false);
+  $('cards').setAttribute('aria-busy', 'true');
+  $('cards').innerHTML = Array.from({ length: 4 }, () => `<div class="card ghost" aria-hidden="true">
+    <div class="thumb shimmer"></div><div class="line shimmer" style="width:55%"></div>
+    <div class="chips"><i class="shimmer"></i><i class="shimmer"></i><i class="shimmer"></i></div></div>`).join('') + '<span class="muted small" style="position:absolute;left:-9999px">Loading templates</span>';
+  show('cards', true);
+  try { index = await (await api(`/templates?projectId=${encodeURIComponent(id)}`)).json(); }
+  catch (e) {
+    $('listState').innerHTML = '<div class="empty"><h2>Couldn\'t load templates</h2><p class="muted">The details are in the message above.</p><button class="btn" id="retry">Try again</button></div>'; show('listState', true);
+    $('cards').innerHTML = ''; $('cards').removeAttribute('aria-busy'); show('cards', false);
+    $('retry').onclick = () => openProject(projectId); fail(e); return;
+  }
+  const names = Object.keys(index.templates);
+  $('cards').removeAttribute('aria-busy');
+  if (!names.length) { show('cards', false); $('listState').innerHTML = '<div class="empty"><h2>No templates found</h2><p class="muted">Name frames <code>template/ratio</code>, e.g. <code>promo/1x1</code>.</p></div>'; show('listState', true); return; }
+  show('cards', true);
+  $('cards').innerHTML = names.map((n) => {
+    const ratios = Object.keys(index.templates[n]);
+    const ready = index.templates[n][ratios[0]].thumbnail;
+    return `<div class="card" tabindex="0" data-t="${esc(n)}"><div class="thumb ${ready ? '' : 'shimmer'}" ${ready ? '' : `data-thumb="${esc(n)}|${esc(ratios[0])}"`}>${ready ? `<img src="${esc(ready)}" alt="">` : ''}</div><strong>${esc(n)}</strong><div>${ratios.map((r) => `<span class="chip">${esc(r)}</span>`).join('')}</div></div>`;
+  }).join('');
+  const io = new IntersectionObserver((entries) => entries.forEach((en) => { if (en.isIntersecting) { io.unobserve(en.target); thumb(en.target); } }));
+  document.querySelectorAll('[data-thumb]').forEach((el) => io.observe(el));
+}
+
+async function thumb(el) {
+  const [t, r] = el.dataset.thumb.split('|');
+  try {
+    const res = await api('/render', { method: 'POST', body: JSON.stringify({ template: t, ratio: r, projectId, format: 'jpg', quality: 60, scale: 0.25 }) });
+    el.innerHTML = `<img src="${URL.createObjectURL(await res.blob())}" alt="">`;
+  } catch { el.innerHTML = '<span class="muted small">no preview</span>'; }
+  el.classList.remove('shimmer');
+}
+
+const openCard = (e) => { const c = e.target.closest('.card'); if (c) openEditor(c.dataset.t, Object.keys(index.templates[c.dataset.t])[0]); };
+$('cards').onclick = openCard;
+$('cards').onkeydown = (e) => { if (e.key === 'Enter') openCard(e); };
+$('reload').onclick = async () => { await api('/cache/clear', { method: 'POST' }); openProject(projectId); };
+$('back').onclick = showList;
+// Breadcrumbs: Project > Template. The project crumb takes you back to its template list.
+function setCrumbs(template) {
+  const name = cfg?.projects.find((x) => x.id === projectId)?.name ?? 'Templates';
+  $('crumbs').innerHTML = template
+    ? `<li><button class="crumb" id="crumbProject" title="Back to ${esc(name)}">${esc(name)}</button></li><li><span class="crumb" aria-current="page" title="${esc(template)}">${esc(template)}</span></li>`
+    : `<li><span class="crumb" aria-current="page" title="${esc(name)}">${esc(name)}</span></li>`;
+}
+$('crumbs').onclick = (e) => { if (e.target.closest('#crumbProject')) showList(); };
+function showList() { show('openSrc', false); show('editor', false); show('back', false); show('reload', true); show('cards', Boolean(index && Object.keys(index.templates).length)); setCrumbs(); }
+
+/* ---------- editor ---------- */
+function openEditor(t, r) {
+  sel = { t, r };
+  const info = index.templates[t][r];
+  setCrumbs(t);
+  $('ratioChips').innerHTML = Object.keys(index.templates[t]).map((x) => `<button class="chip btn ${x === r ? 'on' : ''}" data-r="${esc(x)}">${esc(x)}</button>`).join('');
+  $('fields').innerHTML = info.fields.length ? info.fields.map((f) => {
+    const input = f.type === 'text'
+      ? `<textarea data-k="${esc(f.key)}" placeholder="${esc(f.default ?? '')}"></textarea>`
+      : `<input data-k="${esc(f.key)}" placeholder="Image URL (blank keeps the design)">`;
+    return `<div class="field"><div class="field-head"><b>${esc(f.key)} <span class="muted" style="font-weight:400">${f.type}</span></b><label><input type="checkbox" data-hide="${esc(f.key)}"> hide</label></div>${input}</div>`;
+  }).join('') : '<p class="muted">This template has no dynamic (#) layers.</p>';
+  $('warnings').innerHTML = info.warnings.map((w) => `⚠ ${esc(w)}`).join('<br>');
+  show('cards', false); show('editor', true); show('back', true); show('reload', false);
+  // Link back to the design in its source tool (Figma, Canva), when the integration has one.
+  const provider = index.integration ? index.integration[0].toUpperCase() + index.integration.slice(1) : '';
+  if (info.url) { $('openSrc').href = info.url; $('openSrcLabel').textContent = `Open in ${provider}`; $('openSrcLogo').src = `/logos/${index.integration}.svg`; show('openSrc', true); } else show('openSrc', false);
+  // Figma and static templates preview live in the browser; others (Canva) render on demand.
+  const live = index.livePreview !== false;
+  show('pv', live); show('pvImg', false); show('pvBtn', !live);
+  if (!live && info.thumbnail) { $('pvImg').src = info.thumbnail; show('pvImg', true); $('meta').textContent = 'Template thumbnail. Generate a preview to see your text and images.'; }
+  updatePayload(); preview();
+}
+
+$('ratioChips').onclick = (e) => {
+  const r = e.target.dataset.r; if (!r) return;
+  const vals = collect(); openEditor(sel.t, r);
+  document.querySelectorAll('#fields [data-k]').forEach((el) => { if (vals[el.dataset.k]) el.value = vals[el.dataset.k]; });
+  updatePayload(); preview();
+};
+
+// Empty + untouched = key omitted (keep the design); "hide" sends "" so the layer disappears.
+function collect() {
+  const data = {};
+  document.querySelectorAll('#fields [data-k]').forEach((el) => {
+    const k = el.dataset.k;
+    if (document.querySelector(`[data-hide="${CSS.escape(k)}"]`)?.checked) data[k] = '';
+    else if (el.value.trim() !== '') data[k] = el.value;
+  });
+  return data;
+}
+const body = () => ({ template: sel.t, ratio: sel.r, projectId, data: collect(), format: fmt, scale });
+function updatePayload() { const b = body(); delete b.projectId; $('payload').textContent = JSON.stringify(b, null, 2); }
+
+for (const [id, set] of [['fmtSeg', (v) => (fmt = v)], ['scaleSeg', (v) => (scale = Number(v))]]) {
+  $(id).onclick = (e) => { const v = e.target.dataset.v; if (!v) return; set(v); [...$(id).children].forEach((b) => b.classList.toggle('on', b === e.target)); updatePayload(); };
+}
+
+// Typing is debounced; a discrete change (checkbox, ratio) refreshes almost immediately.
+const debounce = (ms) => { clearTimeout(timer); timer = setTimeout(preview, ms); };
+$('fields').addEventListener('input', () => { updatePayload(); debounce(500); });
+$('fields').addEventListener('change', () => { updatePayload(); debounce(50); });
+$('render').onclick = download;
+$('copy').onclick = () => navigator.clipboard?.writeText($('payload').textContent);
+
+// Live preview: the server returns the page's HTML and this browser draws it, so no
+// image is rendered or transferred while editing. "Download" renders the real file.
+let frameSize = { w: 1, h: 1 };
+function fit() {
+  const k = Math.min(1, ($('stage').clientWidth - 36) / frameSize.w, (window.innerHeight * 0.74) / frameSize.h);
+  $('pv').style.width = `${frameSize.w}px`; $('pv').style.height = `${frameSize.h}px`; $('pv').style.transform = `scale(${k})`;
+  $('pvWrap').style.width = `${frameSize.w * k}px`; $('pvWrap').style.height = `${frameSize.h * k}px`;
+}
+window.addEventListener('resize', fit);
+
+async function preview() {
+  if (index.livePreview === false) return; // renders cost a real design export: only on request
+  inflight?.abort(); inflight = new AbortController(); // a newer edit cancels the stale request
+  const id = ++reqId; show('busy', true);
+  try {
+    const res = await api('/render', { method: 'POST', signal: inflight.signal, body: JSON.stringify({ ...body(), output: 'preview' }) });
+    const html = await res.text(); if (id !== reqId) return;
+    frameSize = { w: Number(res.headers.get('X-Render-Width')), h: Number(res.headers.get('X-Render-Height')) };
+    fit(); $('pv').srcdoc = html; $('meta').textContent = `${frameSize.w}×${frameSize.h}`;
+  } catch (e) { if (id === reqId) fail(e); }
+  finally { if (id === reqId) show('busy', false); }
+}
+
+window.addEventListener('message', (e) => {
+  if (e.source !== $('pv').contentWindow || !e.data?.renderReport) return;
+  const { shrunk, failed } = e.data.renderReport, notes = [];
+  if (shrunk?.length) notes.push(`text auto-shrunk: ${shrunk.map((x) => x.key).join(', ')}`);
+  if (failed?.length) notes.push(`image failed to load: ${failed.join(', ')}`);
+  $('meta').textContent = [`${frameSize.w}×${frameSize.h}`, ...notes].join(' · ');
+});
+
+$('pvBtn').onclick = async () => {
+  $('pvBtn').disabled = true; show('busy', true); $('meta').textContent = 'Rendering with ' + (index.integration || 'the integration') + '…';
+  try {
+    const res = await api('/render', { method: 'POST', body: JSON.stringify({ ...body(), format: 'png', scale: 1 }) });
+    const url = URL.createObjectURL(await res.blob());
+    $('pvImg').src = url; show('pvImg', true);
+    $('meta').textContent = `${res.headers.get('X-Render-Width')}×${res.headers.get('X-Render-Height')}`;
+  } catch (e) { fail(e); $('meta').textContent = ''; }
+  finally { $('pvBtn').disabled = false; show('busy', false); }
+};
+
+async function download() {
+  if ($('render').disabled) return; // ignore double clicks while a render is running
+  $('render').disabled = true; show('busy', true);
+  try {
+    const res = await api('/render', { method: 'POST', body: JSON.stringify(body()) });
+    const url = URL.createObjectURL(await res.blob());
+    Object.assign(document.createElement('a'), { href: url, download: `${sel.t}_${sel.r}.${fmt}` }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) { fail(e); }
+  finally { $('render').disabled = false; show('busy', false); }
+}
+
+boot().then(() => {
+  if (new URLSearchParams(location.search).get('connected') === 'canva') {
+    history.replaceState(null, '', '/'); setSettings(true); $('settingsMsg').textContent = 'Canva connected.';
+  }
+});
+</script>
+</body>
+</html>

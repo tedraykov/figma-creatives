@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer-core';
 import { pageLayoutScript } from './layout.js';
-import { HttpError } from './figma.js';
+import { HttpError } from './errors.js';
 
 const CHROME_PATH = process.env.CHROME_PATH ?? '/usr/bin/chromium';
 const MAX_CONCURRENCY = Number(process.env.MAX_CONCURRENCY ?? 2);
@@ -48,7 +48,7 @@ export async function renderHtml(html, { width, height, scale = 1, format = 'png
     const page = await browser.newPage();
     try {
       await page.setViewport({ width: Math.ceil(width), height: Math.ceil(height), deviceScaleFactor: scale });
-      await page.setContent(html, { waitUntil: 'networkidle0', timeout: RENDER_TIMEOUT_MS });
+      await page.setContent(html, { waitUntil: 'load', timeout: RENDER_TIMEOUT_MS });
       const report = await page.evaluate(pageLayoutScript());
 
       if (strictImages && report.failed.length) {

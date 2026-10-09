@@ -7,9 +7,11 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const fx = (f) => readFileSync(join(here, 'fixtures', f));
 
+process.env.PROVIDER = 'figma';
+process.env.DATA_DIR = join(here, 'out', 'data-figma');
 process.env.FIGMA_TOKEN = 'test';
 process.env.FIGMA_FILE_KEY = 'FILE';
-process.env.API_KEY = 'secret';
+process.env.AUTH_DISABLED = 'true'; // sign-in and API keys are covered by test/api-keys.js and test/oidc.js
 process.env.GOOGLE_FONTS = 'false';
 process.env.PORT = '3999';
 
@@ -75,12 +77,10 @@ mkdirSync(out, { recursive: true });
 
 const assert = (cond, msg) => { if (!cond) { console.error('FAIL:', msg); process.exit(1); } console.log('ok -', msg); };
 
-let r = await realFetch(`${base}/templates`);
-assert(r.status === 401, 'rejects requests without API key');
-
-r = await realFetch(`${base}/templates`, { headers: auth });
+let r = await realFetch(`${base}/templates`, { headers: auth });
 const t = await r.json();
 assert(t.templates.promo['1x1'].fields.map((f) => f.key).join() === 'image,headline,cta,badge', 'discovers dynamic fields');
+assert(t.templates.promo['1x1'].url === 'https://www.figma.com/design/FILE?node-id=1-1', 'links each frame back to Figma');
 
 const product = `data:image/png;base64,${fx('product.png').toString('base64')}`;
 r = await realFetch(`${base}/render`, {
@@ -119,6 +119,22 @@ r = await realFetch(`${base}/render`, {
   body: JSON.stringify({ template: 'promo', ratio: '1x1', data: { image: 'data:image/png;base64,AAAA' } }),
 });
 assert(r.status === 422, 'broken image URL returns 422');
+
+r = await realFetch(`${base}/integrations`, { method: 'POST', headers: auth, body: JSON.stringify({ name: 'Brand', token: 'tok' }) });
+const integ = (await r.json()).integrations.find((i) => i.name === 'Brand');
+r = await realFetch(`${base}/projects`, { method: 'POST', headers: auth, body: JSON.stringify({ link: 'https://www.figma.com/design/FILE/Promo-templates?node-id=0-1', integrationId: integ.id }) });
+const linked = (await r.json()).projects.find((p) => p.source === 'FILE' && p.integrationId === integ.id);
+assert(r.status === 200 && linked?.name === 'Fixture', 'links a project from a Figma URL via an integration');
+r = await realFetch(`${base}/templates?projectId=${linked.id}`, { headers: auth });
+assert(r.status === 200 && (await r.json()).templates.promo, 'lists templates for a specific project');
+r = await realFetch(`${base}/projects/${linked.id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ name: 'Renamed project' }) });
+assert((await r.json()).projects.find((p) => p.id === linked.id).name === 'Renamed project', 'a project can be renamed');
+r = await realFetch(`${base}/projects/${linked.id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ name: '   ' }) });
+assert(r.status === 400, 'a project name cannot be emptied');
+r = await realFetch(`${base}/integrations/${integ.id}`, { method: 'DELETE', headers: auth });
+const afterDelete = await r.json();
+assert(r.status === 200 && !afterDelete.integrations.some((i) => i.id === integ.id) && !afterDelete.projects.some((p) => p.id === linked.id), 'deleting an integration also removes its projects');
+assert(afterDelete.defaultProjectId !== linked.id, 'the default project moves off a deleted project');
 
 console.log('\nAll tests passed. Output in test/out/');
 process.exit(0);
