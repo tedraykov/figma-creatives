@@ -4,7 +4,7 @@
 //
 //   OIDC_ISSUER         e.g. https://your-tenant.eu.auth0.com/ or a Clerk Frontend API URL
 //   OIDC_CLIENT_ID / OIDC_CLIENT_SECRET
-//   ALLOWED_EMAILS      comma-separated emails (or @domain.com entries) allowed to sign in
+//   ALLOWED_EMAILS      optional: comma-separated emails (or @domain.com entries); unset = any verified user of the provider
 //   PUBLIC_URL          optional, e.g. https://figma-creatives.example.com (else derived from the request)
 //   AUTH_DISABLED=true  skip sign-in entirely (local use only)
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -22,7 +22,7 @@ const SESSION_DAYS = 7;
 export const authDisabled = () => env.AUTH_DISABLED === 'true';
 const oidcConfigured = () => Boolean(env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET);
 const allowed = () => (env.ALLOWED_EMAILS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-const isAllowed = (email) => allowed().some((a) => (a.startsWith('@') ? email.endsWith(a) : email === a));
+const isAllowed = (email) => !allowed().length || allowed().some((a) => (a.startsWith('@') ? email.endsWith(a) : email === a));
 
 // Random secret kept in the database, so no env var is needed for cookie signing. An older
 // session-secret file is adopted once, so existing sessions survive the move to SQLite.
@@ -88,7 +88,7 @@ export function authRoutes(app) {
 
   app.get('/auth/login', async (req, res, next) => {
     try {
-      if (!oidcConfigured()) throw new HttpError(503, 'Sign-in is not configured. Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and ALLOWED_EMAILS.');
+      if (!oidcConfigured()) throw new HttpError(503, 'Sign-in is not configured. Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET.');
       const { doc } = await getDiscovery();
       const state = randomBytes(16).toString('base64url');
       const nonce = randomBytes(16).toString('base64url');
@@ -165,5 +165,5 @@ export function requireSession(req, _res, next) {
 export function warnAuth() {
   if (authDisabled()) console.warn('AUTH_DISABLED=true: the web UI and settings are open to anyone who can reach this server.');
   else if (!oidcConfigured()) console.warn('Sign-in is not configured (OIDC_*): the web UI is locked until it is. See README.');
-  else if (!allowed().length) console.warn('ALLOWED_EMAILS is empty: nobody can sign in.');
+  else if (!allowed().length) console.warn('ALLOWED_EMAILS is not set: anyone who can sign in with your provider can use this app. Restrict sign-ups there.');
 }

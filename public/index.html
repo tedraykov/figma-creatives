@@ -390,7 +390,7 @@ async function showSignIn() {
   if ($('signInDlg').open) return;
   const me = await fetch('/auth/me').then((r) => r.json()).catch(() => ({}));
   $('signInMsg').textContent = me.configured === false
-    ? 'Sign-in is not configured on this server yet. Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and ALLOWED_EMAILS (see the README), then reload.'
+    ? 'Sign-in is not configured on this server yet. Set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET (see the README), then reload.'
     : 'Sign in with your account to manage templates, integrations and API keys.';
   $('signInBtn').hidden = me.configured === false;
   $('signInDlg').addEventListener('cancel', (e) => e.preventDefault());

@@ -44,7 +44,7 @@ Adding an integration means implementing the interface documented in `src/integr
 
 Two kinds of caller, two mechanisms:
 
-- **People (the web UI)** sign in through any OpenID Connect provider. Auth0's free plan (25,000 monthly users, social logins included) works well, as do Google, Okta or Clerk. Only emails in `ALLOWED_EMAILS` get in, so a public sign-up on your provider can't reach your settings.
+- **People (the web UI)** sign in through any OpenID Connect provider. Auth0's free plan (25,000 monthly users, social logins included) works well, as do Google, Okta or Clerk. Restrict sign-ups at the provider (invitation-only, or an allowlist) so strangers can't create accounts; optionally set `ALLOWED_EMAILS` as a second lock.
 - **Machines (n8n)** use API keys generated in **Settings → API keys**. Create one per client, name it, and copy it when shown (it can't be shown again). Keys only grant `/templates`, `/render` and `/cache/clear`, never settings. In n8n, use a Header Auth credential: `Authorization: Bearer <key>`.
 
 Environment:
@@ -53,7 +53,7 @@ Environment:
 |---|---|
 | `OIDC_ISSUER` | Provider URL, e.g. `https://your-tenant.eu.auth0.com/` |
 | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | From a "Regular Web Application" in your provider |
-| `ALLOWED_EMAILS` | Comma-separated emails, or `@yourcompany.com` for a whole domain |
+| `ALLOWED_EMAILS` | Optional. Comma-separated emails, or `@yourcompany.com` for a whole domain. Unset = any verified user of your provider gets in |
 | `PUBLIC_URL` | Optional, e.g. `https://figma-creatives.tedraykov.me`; otherwise taken from the request |
 | `OIDC_TOKEN_AUTH` | Optional: `basic` or `post`, to override how the client secret is sent |
 | `AUTH_DISABLED=true` | Skips sign-in. Local use only: anyone who can reach the server can read and change your settings |
@@ -62,9 +62,9 @@ Any OpenID Connect provider works. Two setups are known to work:
 
 **Clerk (email-only sign-in)**
 1. In the Clerk Dashboard, open **User & authentication**: enable **Email** with *Email verification code* (and/or link), and leave Password, Phone and Username off. Under **SSO connections**, enable no social providers.
-2. Under **Restrictions**, set sign-ups to invitation-only, or add an allowlist, so strangers can't create accounts. (`ALLOWED_EMAILS` is a second lock on this app.)
+2. Under **Restrictions**, set sign-ups to invitation-only, or add an allowlist, so strangers can't create accounts. This is what keeps strangers out when `ALLOWED_EMAILS` is unset.
 3. Open **OAuth applications**, then **Add application**, and create one. Select the scopes `openid`, `email` and `profile`, and add the redirect URI `https://<your-domain>/auth/callback`. Copy the **Client ID** and **Client Secret** (the secret is shown once).
-4. Set `OIDC_ISSUER` to your instance's **Frontend API URL** (for example `https://example-name-12.clerk.accounts.dev`; the Discovery URL is that plus `/.well-known/openid-configuration`), plus `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and `ALLOWED_EMAILS`.
+4. Set `OIDC_ISSUER` to your instance's **Frontend API URL** (for example `https://example-name-12.clerk.accounts.dev`; the Discovery URL is that plus `/.well-known/openid-configuration`), plus `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET`.
 
 **Auth0:** create a Regular Web Application, add `https://<your-domain>/auth/callback` to Allowed Callback URLs (and `http://localhost:3000/auth/callback` for local use) and your domain to Allowed Logout URLs.
 
