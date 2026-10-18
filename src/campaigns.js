@@ -13,7 +13,7 @@ function validate(body) {
     for (const k of ['template', 'ratio', 'language']) if (!isString(j?.[k])) throw new HttpError(400, `jobs[${i}] needs "${k}"`);
     if (j.data !== undefined && (typeof j.data !== 'object' || j.data === null || Array.isArray(j.data))) throw new HttpError(400, `jobs[${i}].data must be an object`);
   });
-  return { campaign: body.campaign.trim(), date: body.date ? String(body.date) : '', driveFolder: body.driveFolder ? String(body.driveFolder) : '', jobs: body.jobs.map((j) => ({ template: j.template, ratio: j.ratio, language: j.language, data: j.data ?? {} })) };
+  return { campaign: body.campaign.trim(), date: body.date ? String(body.date) : '', jobs: body.jobs.map((j) => ({ template: j.template, ratio: j.ratio, language: j.language, data: j.data ?? {} })) };
 }
 
 const summary = (c) => ({

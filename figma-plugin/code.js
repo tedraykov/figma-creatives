@@ -145,8 +145,12 @@ async function fill(frame, data, fallback) {
 async function generate(payload, fallback) {
   const jobs = Array.isArray(payload) ? payload : payload.jobs;
   if (!Array.isArray(jobs) || !jobs.length) throw new Error('The payload has no jobs.');
-  const campaign = (!Array.isArray(payload) && payload.campaign) || 'campaign';
-  const date = !Array.isArray(payload) && payload.date ? `${payload.date} ` : '';
+  const head = Array.isArray(payload) ? {} : payload;
+  const campaign = head.campaign || 'campaign';
+  // "2026-10-12" -> "12.10.2026". The export flow reads the date and name back from this page name,
+  // and it becomes the campaign's Drive folder, so keep the format.
+  const iso = String(head.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = iso ? `${iso[3]}.${iso[2]}.${iso[1]} ` : head.date ? `${head.date} ` : '';
 
   const templates = await findTemplates();
   const missing = [...new Set(jobs.map((j) => `${j.template}/${j.ratio}`))].filter((k) => !templates.has(k));
