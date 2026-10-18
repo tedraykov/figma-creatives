@@ -44,6 +44,7 @@ assert((await call('/templates', b.key)).status === 200, 'a second key works too
 const listed = await (await call('/projects', a.key)).json();
 assert(listed.projects?.length >= 1 && listed.projects.some((p) => p.default) && !JSON.stringify(listed).includes('source'), 'an API key can list projects (id, name, default) without sources');
 assert((await call('/projects')).status === 401, 'the project list needs a key or session');
+assert((await call('/campaigns')).status === 401 && (await call('/campaigns', a.key)).status === 200, 'the campaign inbox needs a key or session');
 assert((await call('/api-keys', a.key)).status === 401, 'an API key cannot reach admin settings');
 assert((await call('/templates', 'fr_wrong')).status === 401, 'an unknown key is rejected');
 child3.kill();

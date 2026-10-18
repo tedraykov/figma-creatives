@@ -1,0 +1,50 @@
+{
+  "campaign": "autumn-sale",
+  "date": "2026-10-05",
+  "jobs": [
+    {
+      "template": "H",
+      "ratio": "Desktop",
+      "language": "en",
+      "data": {
+        "headline": "AUTUMN\nSALE",
+        "subheadline": "Up to 40% off",
+        "cta": "Shop **now**",
+        "note": ""
+      }
+    },
+    {
+      "template": "H",
+      "ratio": "Mobile",
+      "language": "en",
+      "data": {
+        "headline": "AUTUMN SALE",
+        "subheadline": "Up to 40% off",
+        "cta": "Shop **now**",
+        "note": ""
+      }
+    },
+    {
+      "template": "H",
+      "ratio": "Desktop",
+      "language": "de",
+      "data": {
+        "headline": "HERBST-\nANGEBOT",
+        "subheadline": "Bis zu 40 % Rabatt",
+        "cta": "Jetzt **kaufen**",
+        "note": ""
+      }
+    },
+    {
+      "template": "H",
+      "ratio": "Mobile",
+      "language": "de",
+      "data": {
+        "headline": "HERBSTANGEBOT",
+        "subheadline": "Bis zu 40 % Rabatt",
+        "cta": "Jetzt **kaufen**",
+        "note": ""
+      }
+    }
+  ]
+}

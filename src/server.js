@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authRoutes, requireSession, warnAuth } from './auth.js';
 import { canvaOAuthRoutes } from './canva-oauth.js';
+import { campaignPayload, completeCampaign, discardCampaign, pendingCampaigns, queueCampaign } from './campaigns.js';
 import {
   addIntegration, addProject, createApiKey, findProjectBySource, firstIntegrationOfType, getDefaultProject, getIntegration,
   getProject, listApiKeys, publicConfig, removeIntegration, removeProject, restoreSamples, revokeApiKey, setDefaultProject,
@@ -33,7 +34,18 @@ const apiKeyOrSession = (req, _res, next) => {
   if (presented && verifyApiKey(presented)) return next();
   requireSession(req, _res, next);
 };
-for (const route of ['/templates', '/render', '/cache']) app.use(route, apiKeyOrSession);
+// The Figma plugin runs in a sandboxed iframe (Origin: null) and authenticates with a key header, not cookies,
+// so it may call /campaigns from anywhere. Answered before auth so preflights get through.
+app.use('/campaigns', (req, res, next) => {
+  res.set({
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, content-type, x-api-key',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  });
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+for (const route of ['/templates', '/render', '/cache', '/campaigns']) app.use(route, apiKeyOrSession);
 // Read-only project list for machine clients (n8n picks a project, then passes its id as projectId).
 // Sources and credentials stay out of it.
 app.get('/projects', apiKeyOrSession, (_req, res) => {
@@ -161,6 +173,13 @@ app.post('/render', wrap(async (req, res) => {
   });
   res.send(image);
 }));
+
+// Campaigns: n8n queues one per run, the Figma plugin lists the pending ones, builds the page and marks it done.
+app.post('/campaigns', (req, res) => res.status(201).json(queueCampaign(req.body)));
+app.get('/campaigns', (_req, res) => res.json({ campaigns: pendingCampaigns() }));
+app.get('/campaigns/:id', (req, res) => res.json(campaignPayload(req.params.id)));
+app.post('/campaigns/:id/done', (req, res) => { completeCampaign(req.params.id, req.body?.pageUrl); res.json({ ok: true }); });
+app.delete('/campaigns/:id', (req, res) => { discardCampaign(req.params.id); res.json({ ok: true }); });
 
 app.post('/cache/clear', (_req, res) => res.json({ cleared: clearAllCaches() }));
 

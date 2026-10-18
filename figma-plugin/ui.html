@@ -1,0 +1,115 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { font: 12px/1.4 Inter, system-ui, sans-serif; margin: 0; padding: 12px; color: var(--figma-color-text, #222); background: var(--figma-color-bg, #fff); }
+  h3 { font-size: 12px; margin: 12px 0 6px; display: flex; justify-content: space-between; align-items: center; }
+  input[type=text], input[type=password], textarea { box-sizing: border-box; width: 100%; padding: 6px 8px; border: 1px solid var(--figma-color-border, #ccc); border-radius: 4px; background: transparent; color: inherit; font: inherit; margin-bottom: 6px; }
+  textarea { height: 120px; font: 11px/1.4 ui-monospace, monospace; resize: vertical; }
+  button { padding: 6px 12px; border: 0; border-radius: 6px; background: #0d99ff; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: inherit; border: 1px solid var(--figma-color-border, #ccc); font-weight: 400; }
+  button:disabled { opacity: .5; cursor: default; }
+  .item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--figma-color-border, #ddd); border-radius: 6px; margin-bottom: 6px; }
+  .item small, .muted { color: var(--figma-color-text-secondary, #777); }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  #log { height: 150px; overflow: auto; border-top: 1px solid var(--figma-color-border, #ddd); padding-top: 6px; margin-top: 10px; }
+  #log div { padding: 1px 0; }
+  .warn { color: #b26a00; } .error { color: #d32f2f; } .ok { color: #1b873f; font-weight: 600; }
+</style>
+
+<h3>Pending campaigns <button class="ghost" id="refresh">Refresh</button></h3>
+<div id="inbox" class="muted">Loading…</div>
+<label><input type="checkbox" id="fb"> If a font is missing, use Inter (layout test only)</label>
+
+<details id="settings">
+  <summary>Connection</summary>
+  <p class="muted">The Creatives service and an API key from its Settings.</p>
+  <input type="text" id="baseUrl" placeholder="https://creatives.tedraykov.me">
+  <input type="password" id="apiKey" placeholder="API key (fr_…)">
+  <button id="save">Save and refresh</button>
+</details>
+
+<details>
+  <summary>Paste a payload instead</summary>
+  <textarea id="payload" spellcheck="false" placeholder='{"campaign":"autumn-sale","jobs":[…]}'></textarea>
+  <button id="manual">Generate page</button>
+</details>
+
+<div id="log"></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let settings = { baseUrl: '', apiKey: '' };
+  let busy = false;
+
+  const log = (text, level = '') => { const d = document.createElement('div'); d.className = level; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = $('log').scrollHeight; };
+  const send = (m) => parent.postMessage({ pluginMessage: m }, '*');
+  const api = (path, opts = {}) => fetch(settings.baseUrl.replace(/\/$/, '') + path, {
+    ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${settings.apiKey}` },
+  }).then(async (r) => {
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+    return body;
+  });
+
+  async function refresh() {
+    const box = $('inbox');
+    if (!settings.apiKey) { box.textContent = 'Add your API key under Connection.'; $('settings').open = true; return; }
+    box.textContent = 'Loading…';
+    try {
+      const { campaigns } = await api('/campaigns');
+      box.textContent = '';
+      if (!campaigns.length) { box.textContent = 'Nothing waiting. Run the n8n flow to queue a campaign.'; return; }
+      for (const c of campaigns) {
+        const row = document.createElement('div'); row.className = 'item';
+        const info = document.createElement('div');
+        const strong = document.createElement('strong'); strong.textContent = c.name;
+        const small = document.createElement('small'); small.textContent = ` ${c.date || ''}`;
+        const meta = document.createElement('div'); meta.className = 'muted'; meta.textContent = `${c.languages.join(', ')} · ${c.frames} frames`;
+        info.append(strong, small, meta);
+        const go = document.createElement('button'); go.textContent = 'Generate';
+        go.onclick = () => generate(c);
+        const del = document.createElement('button'); del.className = 'ghost'; del.textContent = '✕'; del.title = 'Discard';
+        del.onclick = async () => { await api(`/campaigns/${c.id}`, { method: 'DELETE' }).catch((e) => log(e.message, 'error')); refresh(); };
+        const actions = document.createElement('div'); actions.append(go, ' ', del);
+        row.append(info, actions); box.appendChild(row);
+      }
+    } catch (e) { box.textContent = ''; log(`Could not load campaigns: ${e.message}`, 'error'); }
+  }
+
+  async function generate(c) {
+    if (busy) return;
+    busy = true; $('log').textContent = '';
+    try {
+      const payload = await api(`/campaigns/${c.id}`);
+      send({ type: 'generate', payload: JSON.stringify(payload), campaignId: c.id, fallback: $('fb').checked });
+    } catch (e) { busy = false; log(e.message, 'error'); }
+  }
+
+  $('refresh').onclick = refresh;
+  $('save').onclick = () => {
+    settings = { baseUrl: $('baseUrl').value.trim(), apiKey: $('apiKey').value.trim() };
+    send({ type: 'saveSettings', settings });
+    refresh();
+  };
+  $('manual').onclick = () => {
+    if (busy) return;
+    busy = true; $('log').textContent = '';
+    send({ type: 'generate', payload: $('payload').value, fallback: $('fb').checked });
+  };
+
+  onmessage = async (e) => {
+    const m = e.data.pluginMessage;
+    if (m.type === 'settings') {
+      settings = m.settings; $('baseUrl').value = settings.baseUrl; $('apiKey').value = settings.apiKey; refresh();
+    } else if (m.type === 'log') {
+      log(m.text, m.level === 'info' ? '' : m.level);
+    } else if (m.type === 'done') {
+      busy = false;
+      if (m.ok && m.campaignId) {
+        await api(`/campaigns/${m.campaignId}/done`, { method: 'POST', body: JSON.stringify({ pageUrl: m.pageUrl }) }).catch((err) => log(`Built, but could not mark done: ${err.message}`, 'warn'));
+        refresh();
+      }
+    }
+  };
+  send({ type: 'init' });
+</script>

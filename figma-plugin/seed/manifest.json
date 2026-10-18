@@ -1,0 +1,8 @@
+{
+  "name": "Creatives test templates",
+  "id": "creatives-test-templates",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page"
+}

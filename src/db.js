@@ -28,6 +28,10 @@ db.exec(`
     created_at TEXT NOT NULL, last_used_at TEXT, position INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS campaigns (        -- jobs queued by n8n for the Figma plugin to build
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL, done_at TEXT, page_url TEXT
+  );
 `);
 
 const count = (table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
@@ -76,3 +80,16 @@ export function writeAll(state) {
     throw e;
   }
 }
+
+const campaignRow = (r) => r && ({
+  id: r.id, name: r.name, status: r.status, createdAt: r.created_at, doneAt: r.done_at, pageUrl: r.page_url,
+  payload: JSON.parse(r.payload),
+});
+export const insertCampaign = (id, name, payload) =>
+  db.prepare('INSERT INTO campaigns (id, name, payload, created_at) VALUES (?, ?, ?, ?)').run(id, name, JSON.stringify(payload), new Date().toISOString());
+export const getCampaign = (id) => campaignRow(db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id));
+export const listCampaigns = (status, limit = 50) =>
+  db.prepare('SELECT * FROM campaigns WHERE status = ? ORDER BY created_at DESC LIMIT ?').all(status, limit).map(campaignRow);
+export const finishCampaign = (id, pageUrl) =>
+  db.prepare("UPDATE campaigns SET status = 'done', done_at = ?, page_url = ? WHERE id = ?").run(new Date().toISOString(), pageUrl ?? null, id).changes;
+export const deleteCampaign = (id) => db.prepare('DELETE FROM campaigns WHERE id = ?').run(id).changes;

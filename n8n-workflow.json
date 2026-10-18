@@ -4,7 +4,7 @@
     {
       "parameters": {
         "formTitle": "Generate creatives",
-        "formDescription": "Step 1 of 3. Say where the copy is and where the files go. Next you choose the project and the templates.",
+        "formDescription": "Step 1 of 4. One Google Sheet holds your campaigns, laid out as blocks. Say where it is and where the files go. Next you choose the campaign, the project and the templates.",
         "formFields": {
           "values": [
             {
@@ -16,10 +16,6 @@
               "fieldLabel": "Drive folder URL",
               "placeholder": "https://drive.google.com/drive/folders/…",
               "requiredField": true
-            },
-            {
-              "fieldLabel": "Campaign",
-              "placeholder": "Campaign id or name from the sheet (leave empty for all rows)"
             },
             {
               "fieldLabel": "Languages",
@@ -34,10 +30,64 @@
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.2,
       "position": [
-        0,
-        0
+        1072,
+        432
       ],
       "webhookId": "figma-renderer-form"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $('Creative form').first().json['Sheet URL'] }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ ($('Creative form').first().json['Sheet URL'].match(/gid=(\\d+)/) || [])[1] || '0' }}"
+        },
+        "options": {}
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000005",
+      "name": "Read sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1312,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// One Google Sheet holds a month of campaigns. Row 1 is the header (the Read sheet node turns it\n// into the keys) and is frozen, so the languages are defined once for the whole sheet. Then one\n// block per campaign, separated by a blank row:\n//   field      | en | de | ...      header row (row 1): one column per language\n//   <campaign> | <date>             title row\n//   headline   | ...               one row per field\n// Campaigns can use different fields. A campaign renders only the languages that have at least one\n// cell filled in. Cells are kept as typed; the empty / \"-\" rules are applied when the jobs are built.\nconst url = $('Creative form').first().json['Sheet URL'];\nconst spreadsheetId = url.match(/\\/d\\/([a-zA-Z0-9_-]+)/)?.[1];\nif (!spreadsheetId) throw new Error('The Sheet URL is not a Google Sheets link.');\n\nconst rows = $input.all().map((i) => i.json);\nconst slug = (s) => String(s ?? '').trim().replace(/\\s+/g, '-').toLowerCase();\nconst keys = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter((k) => k !== 'row_number' && k.trim());\nconst fieldKey = keys[0];\nif (String(fieldKey ?? '').trim().toLowerCase() !== 'field') throw new Error(`Cell A1 must be \"field\" (the header row holds \"field\" and the languages), found \"${fieldKey ?? ''}\".`);\nconst cols = []; // [language code, column key]\nfor (const key of keys.slice(1)) {\n  const code = slug(key);\n  if (cols.some(([l]) => l === code)) throw new Error(`The language \"${code}\" appears twice in the header row.`);\n  cols.push([code, key]);\n}\nif (!cols.length) throw new Error('No languages in the header row.');\n\nconst val = (row, key) => String(row[key] ?? '').trim();\n// The Read sheet node may drop blank rows, so a title row is also recognised by its date.\nconst DATE = /^\\d{4}[-./]\\d{1,2}[-./]\\d{1,2}$|^\\d{1,2}[-./]\\d{1,2}[-./]\\d{2,4}$/;\nconst looksLikeTitle = (row) => DATE.test(val(row, cols[0][1])) && cols.slice(1).every(([, key]) => val(row, key) === '');\n\nconst campaigns = [];\nlet cur = null;\nlet prev = null;\nrows.forEach((row, i) => {\n  const num = Number(row.row_number) || i + 2;\n  const blank = !val(row, fieldKey) && cols.every(([, key]) => val(row, key) === '');\n  if (blank || (prev !== null && num - prev > 1)) cur = null; // blank row (or a gap in row numbers) ends a block\n  prev = num;\n  if (blank) return;\n  const at = `Row ${num}`;\n  if (!cur || looksLikeTitle(row)) { // title row\n    if (!val(row, fieldKey)) throw new Error(`${at}: expected the campaign name in column A.`);\n    cur = { name: val(row, fieldKey), date: val(row, cols[0][1]), fields: {} };\n    cur.label = cur.date ? `${cur.name} (${cur.date})` : cur.name;\n    if (campaigns.some((c) => c.label === cur.label)) throw new Error(`${at}: the campaign \"${cur.label}\" appears twice.`);\n    campaigns.push(cur);\n    return;\n  }\n  const field = val(row, fieldKey).toLowerCase(); // field row\n  if (!field) throw new Error(`${at}: a row under \"${cur.name}\" has values but no field name in column A.`);\n  if (cur.fields[field]) throw new Error(`${at}: the field \"${field}\" appears twice under \"${cur.name}\".`);\n  cur.fields[field] = Object.fromEntries(cols.map(([code, key]) => [code, val(row, key)]));\n});\nfor (const c of campaigns) {\n  if (!Object.keys(c.fields).length) throw new Error(`The campaign \"${c.name}\" has no field rows.`);\n  c.languages = cols.map(([code]) => code).filter((code) => Object.values(c.fields).some((v) => v[code] !== ''));\n}\nif (!campaigns.length) throw new Error('No campaigns found in the sheet. Each block starts with the campaign name in column A and the date in column B, under the header row.');\nreturn [{ json: { spreadsheetId, campaigns } }];"
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000011",
+      "name": "Parse sheet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Choose a campaign",
+        "formDescription": "Step 2 of 4. The campaigns found in the sheet, with their dates.",
+        "defineForm": "json",
+        "jsonOutput": "={{ JSON.stringify([{ fieldLabel: 'Campaign', fieldType: 'dropdown', requiredField: true, fieldOptions: { values: $json.campaigns.map((c) => ({ option: c.label })) } }]) }}",
+        "options": {}
+      },
+      "id": "b2f0c001-0000-4000-8000-000000000012",
+      "name": "Choose campaign",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1792,
+        432
+      ],
+      "webhookId": "figma-renderer-campaign"
     },
     {
       "parameters": {
@@ -51,14 +101,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        240,
-        0
+        2032,
+        432
       ]
     },
     {
       "parameters": {
         "formTitle": "Choose a project",
-        "formDescription": "Step 2 of 3. The projects linked in Creatives. The default project is listed first.",
+        "formDescription": "Step 3 of 4. The projects linked in Creatives. The default project is listed first.",
         "defineForm": "json",
         "jsonOutput": "={{ JSON.stringify([{ fieldLabel: 'Project', fieldType: 'dropdown', requiredField: true, fieldOptions: { values: [...$json.projects].sort((a, b) => Number(b.default) - Number(a.default)).map((p) => ({ option: p.name })) } }]) }}",
         "options": {}
@@ -66,10 +116,10 @@
       "id": "b2f0c001-0000-4000-8000-000000000007",
       "name": "Choose project",
       "type": "n8n-nodes-base.form",
-      "typeVersion": 2.3,
+      "typeVersion": 2.5,
       "position": [
-        480,
-        0
+        2272,
+        432
       ],
       "webhookId": "figma-renderer-project"
     },
@@ -94,14 +144,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        720,
-        0
+        2512,
+        432
       ]
     },
     {
       "parameters": {
         "formTitle": "Choose templates",
-        "formDescription": "Step 3 of 3. Every template and aspect ratio in the project (template/ratio). Pick as many as you need.",
+        "formDescription": "Step 4 of 4. Every template and aspect ratio in the project (template/ratio). Pick as many as you need.",
         "defineForm": "json",
         "jsonOutput": "={{ JSON.stringify([{ fieldLabel: 'Creatives', fieldType: 'dropdown', multiselect: true, requiredField: true, fieldOptions: { values: Object.entries($json.templates).flatMap(([template, ratios]) => Object.keys(ratios).map((ratio) => ({ option: template + '/' + ratio }))) } }]) }}",
         "options": {}
@@ -109,103 +159,99 @@
       "id": "b2f0c001-0000-4000-8000-000000000009",
       "name": "Choose creatives",
       "type": "n8n-nodes-base.form",
-      "typeVersion": 2.3,
+      "typeVersion": 2.5,
       "position": [
-        960,
-        0
+        2752,
+        432
       ],
       "webhookId": "figma-renderer-creatives"
     },
     {
       "parameters": {
-        "documentId": {
-          "__rl": true,
-          "mode": "url",
-          "value": "={{ $('Creative form').first().json['Sheet URL'] }}"
-        },
-        "sheetName": {
-          "__rl": true,
-          "mode": "id",
-          "value": "={{ ($('Creative form').first().json['Sheet URL'].match(/gid=(\\d+)/) || [])[1] || '0' }}"
-        },
-        "options": {}
-      },
-      "id": "b2f0c001-0000-4000-8000-000000000005",
-      "name": "Read sheet",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.5,
-      "position": [
-        1200,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Sheet columns: campaign_id | campaign | language | headline | body | cta | background\n// The sheet holds content only. The project, templates and ratios are chosen in the forms.\n// One row = one campaign in one language; n languages = n rows with the same campaign_id.\n// A cell left empty is not sent, so the design keeps its default for that layer.\n// A cell containing only \"-\" hides the layer (the renderer treats \"\" as hidden).\nconst form = $('Creative form').first().json;\nconst projects = $('Get projects').first().json.projects;\nconst projectName = $('Choose project').first().json.Project;\nconst projectId = projects.find((p) => p.name === projectName)?.id;\nif (!projectId) throw new Error(`Project \"${projectName}\" is no longer in Creatives.`);\nconst picked = $('Choose creatives').first().json.Creatives;\nconst creatives = (Array.isArray(picked) ? picked : [picked]).map((v) => {\n  const i = String(v).lastIndexOf('/');\n  return { template: v.slice(0, i), ratio: v.slice(i + 1) };\n});\n\nconst slug = (s) => String(s ?? '').trim().replace(/\\s+/g, '-').toLowerCase();\nconst wantCampaign = slug(form.Campaign);\nconst wantLanguages = String(form.Languages ?? '').split(',').map(slug).filter(Boolean);\nconst stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '');\n\n// Content columns -> layer keys in the design (#headline, #body, #cta, #background).\nconst FIELDS = ['headline', 'body', 'cta', 'background'];\nconst cell = (row, name) => {\n  const key = Object.keys(row).find((k) => k.trim().toLowerCase() === name);\n  const value = key === undefined ? '' : String(row[key] ?? '').trim();\n  return value === '-' ? '' : value === '' ? undefined : value;\n};\n\n// The sheet must be the Creatives table: these columns are always present and filled. The content\n// columns can be left blank per row, or empty for the whole table, so they are not required here.\nconst TABLE = ['campaign_id', 'campaign', 'language', 'headline', 'body', 'cta', 'background'];\nconst REQUIRED = ['campaign_id', 'campaign', 'language'];\nconst headers = new Set($input.all().flatMap((i) => Object.keys(i.json)).map((k) => k.trim().toLowerCase()));\nconst missing = REQUIRED.filter((c) => !headers.has(c));\nif (missing.length) throw new Error(`The sheet is not in the expected table format. Missing columns: ${missing.join(', ')}. Expected: ${TABLE.join(' | ')}`);\n\nconst jobs = [];\nfor (const item of $input.all()) {\n  const row = item.json;\n  const campaignId = slug(cell(row, 'campaign_id'));\n  const campaignName = slug(cell(row, 'campaign'));\n  if (!campaignId && !campaignName) continue; // blank or spacer row\n  const language = slug(cell(row, 'language') ?? 'default');\n  if (wantCampaign && wantCampaign !== campaignId && wantCampaign !== campaignName) continue;\n  if (wantLanguages.length && !wantLanguages.includes(language)) continue;\n\n  const data = {};\n  for (const field of FIELDS) {\n    const value = cell(row, field);\n    if (value !== undefined) data[field] = value;\n  }\n  for (const { template, ratio } of creatives) {\n    jobs.push({\n      json: { projectId, template, ratio, data, language, fileName: `${campaignId || campaignName}_${template}_${language}_${ratio}_${stamp}.png` },\n    });\n  }\n}\nif (!jobs.length) throw new Error('No sheet rows matched the campaign and languages you entered.');\nreturn jobs;"
+        "jsCode": "// A campaign is one block of the sheet (see Parse sheet): rows are fields, columns are languages.\n// The output is one payload for the Figma plugin, which builds a page with a frame per language and template/ratio.\n// Text may mark emphasis with **double asterisks**; the plugin styles that part.\n// A cell left empty is not sent, so the design keeps its default for that layer.\n// A cell containing only \"-\" hides the layer (the renderer treats \"\" as hidden).\nconst form = $('Creative form').first().json;\nconst { spreadsheetId, campaigns } = $('Parse sheet').first().json;\nconst label = $('Choose campaign').first().json.Campaign;\nconst campaign = campaigns.find((c) => c.label === label);\nif (!campaign) throw new Error(`Campaign \"${label}\" is no longer in the sheet.`);\nconst projects = $('Get projects').first().json.projects;\nconst projectName = $('Choose project').first().json.Project;\nconst projectId = projects.find((p) => p.name === projectName)?.id;\nif (!projectId) throw new Error(`Project \"${projectName}\" is no longer in Creatives.`);\nconst picked = $('Choose creatives').first().json.Creatives;\nconst creatives = (Array.isArray(picked) ? picked : [picked]).map((v) => {\n  const i = String(v).lastIndexOf('/');\n  return { template: v.slice(0, i), ratio: v.slice(i + 1) };\n});\n\nconst slug = (s) => String(s ?? '').trim().replace(/\\s+/g, '-').toLowerCase();\nconst wantLanguages = String(form.Languages ?? '').split(',').map(slug).filter(Boolean);\nconst languages = campaign.languages.filter((l) => !wantLanguages.length || wantLanguages.includes(l));\nif (!languages.length) throw new Error(`None of the languages you entered are in \"${campaign.name}\". It has: ${campaign.languages.join(', ')}.`);\n\nconst jobs = [];\nfor (const language of languages) {\n  const data = {};\n  for (const [field, values] of Object.entries(campaign.fields)) {\n    const value = String(values[language] ?? '').trim();\n    if (value === '-') data[field] = '';\n    else if (value !== '') data[field] = value;\n  }\n  for (const { template, ratio } of creatives) {\n    jobs.push({\n      template, ratio, language, data,\n    });\n  }\n}\n// Resolved like the renderer: a missing key keeps the design, \"\" hides the layer.\nreturn [{ json: { campaign: slug(campaign.name) || 'campaign', date: campaign.date, driveFolder: form['Drive folder URL'], jobs } }];\n"
       },
       "id": "b2f0c001-0000-4000-8000-000000000002",
-      "name": "Build render jobs",
+      "name": "Build campaign",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1440,
-        0
+        2992,
+        432
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://creatives.tedraykov.me/render",
+        "url": "https://creatives.tedraykov.me/campaigns",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ projectId: $json.projectId, template: $json.template, ratio: $json.ratio, data: $json.data, format: 'png', scale: 1 }) }}",
-        "options": {
-          "response": {
-            "response": {
-              "responseFormat": "file"
-            }
-          },
-          "timeout": 60000
-        }
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
       },
       "id": "b2f0c001-0000-4000-8000-000000000003",
-      "name": "Render",
+      "name": "Queue campaign",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1680,
-        0
+        3232,
+        432
       ]
     },
     {
       "parameters": {
-        "name": "={{ $('Build render jobs').item.json.fileName }}",
-        "driveId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "My Drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "mode": "url",
-          "value": "={{ $('Creative form').first().json['Drive folder URL'] }}"
-        },
+        "operation": "completion",
+        "completionTitle": "Campaign queued",
+        "completionMessage": "={{ 'Queued \"' + $json.name + '\": ' + $json.frames + ' frames in ' + $json.languages.join(', ') + '. Open the Creatives plugin in Figma and click Generate.' }}",
         "options": {}
       },
       "id": "b2f0c001-0000-4000-8000-000000000004",
-      "name": "Upload to Drive",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
+      "name": "Queued",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
       "position": [
-        1920,
-        0
-      ]
+        3472,
+        432
+      ],
+      "webhookId": "figma-renderer-queued"
     }
   ],
   "connections": {
     "Creative form": {
+      "main": [
+        [
+          {
+            "node": "Read sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read sheet": {
+      "main": [
+        [
+          {
+            "node": "Parse sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse sheet": {
+      "main": [
+        [
+          {
+            "node": "Choose campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose campaign": {
       "main": [
         [
           {
@@ -253,40 +299,29 @@
       "main": [
         [
           {
-            "node": "Read sheet",
+            "node": "Build campaign",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Read sheet": {
+    "Build campaign": {
       "main": [
         [
           {
-            "node": "Build render jobs",
+            "node": "Queue campaign",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build render jobs": {
+    "Queue campaign": {
       "main": [
         [
           {
-            "node": "Render",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Render": {
-      "main": [
-        [
-          {
-            "node": "Upload to Drive",
+            "node": "Queued",
             "type": "main",
             "index": 0
           }

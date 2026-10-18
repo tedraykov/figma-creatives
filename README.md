@@ -45,7 +45,7 @@ Adding an integration means implementing the interface documented in `src/integr
 Two kinds of caller, two mechanisms:
 
 - **People (the web UI)** sign in through any OpenID Connect provider. Auth0's free plan (25,000 monthly users, social logins included) works well, as do Google, Okta or Clerk. Restrict sign-ups at the provider (invitation-only, or an allowlist) so strangers can't create accounts; optionally set `ALLOWED_EMAILS` as a second lock.
-- **Machines (n8n)** use API keys generated in **Settings → API keys**. Create one per client, name it, and copy it when shown (it can't be shown again). Keys only grant `/templates`, `/render` and `/cache/clear`, never settings. In n8n, use a Header Auth credential: `Authorization: Bearer <key>`.
+- **Machines (n8n)** use API keys generated in **Settings → API keys**. Create one per client, name it, and copy it when shown (it can't be shown again). Keys only grant `/templates`, `/render`, `/campaigns` and `/cache/clear`, never settings. In n8n, use a Header Auth credential: `Authorization: Bearer <key>`.
 
 Environment:
 
@@ -86,6 +86,8 @@ It runs anywhere Docker runs: a Proxmox LXC or VM, a small VPS, Fly.io, Railway 
 
 All endpoints except `/health` need `Authorization: Bearer <API_KEY>` (or `X-API-Key`).
 
+**`/campaigns`** (API key): `POST` queues `{ campaign, date?, driveFolder?, jobs: [{ template, ratio, language, data }] }`, `GET` lists pending campaigns, `GET /campaigns/:id` returns the payload, `POST /campaigns/:id/done` (with an optional `pageUrl`) completes it and `DELETE` discards it.
+
 **`GET /templates`** lists templates, ratios, pixel sizes, dynamic fields and design warnings. Use it to check a file after editing.
 
 **`POST /render`** returns the image as binary.
@@ -117,24 +119,44 @@ Errors come back as JSON: `401` bad key, `404` unknown template or ratio, `422` 
 
 Import `n8n-workflow.json`, then:
 
-1. In **Read sheet** and **Upload to Drive**, connect your Google account. The sheet and the Drive folder are not configured in the workflow: you paste their URLs into the form each run (the tab comes from the `#gid=` in the sheet URL; a URL without it reads the first tab).
-2. In **Render**, set the URL to your renderer and create a Header Auth credential: name `Authorization`, value `Bearer <key>`, with a key created in **Settings → API keys**.
+1. In **Read sheet**, connect your Google account (a Google Sheets credential). The sheet and the Drive folder are not configured in the workflow: you paste their URLs into the form each run (the tab comes from the `#gid=` in the sheet URL; a URL without it reads the first tab).
+2. In **Queue campaign**, **Get projects** and **Get templates**, use a Header Auth credential: name `Authorization`, value `Bearer <key>`, with a key created in **Settings → API keys**.
 
-The copy lives in the sheet, one row per creative per language, with these columns (header names are not case-sensitive):
+**One Google Sheet holds many campaigns (for example a month), one block per campaign.** Row 1 is a header with `field` and one column per language, defined once for the whole sheet. Freeze it (View → Freeze → 1 row) and the languages stay visible wherever you scroll. Each block below has a title row with the campaign name (column A) and date (column B), then one row per field. A blank row separates blocks. See `example-campaigns-sheet-blocks.xlsx`.
 
-| campaign_id | campaign | language | headline | body | cta | background |
-|---|---|---|---|---|---|---|
-| c-101 | Autumn sale | en | Autumn sale | Up to 40% off | Shop now | https://…/bg.jpg |
-| c-101 | Autumn sale | de | Herbstangebot | Bis zu 40 % Rabatt | Jetzt kaufen | |
-| c-102 | Product teaser | en | Coming soon | | | |
+| field | en | de | bg |
+|---|---|---|---|
+| **autumn-sale** | 2026-10-05 | | |
+| headline | Autumn sale | Herbstangebot | Есенна разпродажба |
+| body | Up to 40% off | Bis zu 40 % Rabatt | |
+| cta | Shop now | Jetzt kaufen | |
+| background | https://…/bg.jpg | | https://…/bg.jpg |
+| | | | |
+| **halloween** | 2026-10-30 | | |
+| headline | Spooky deals | Gruselige Angebote | |
+| cta | Trick or treat | Süßes oder Saures | |
 
-- Format the range as a Google Sheets **table** (Format → Convert to table) named `Creatives`, with exactly these columns. The workflow reads the table's data and stops with a clear error if `campaign_id`, `campaign` or `language` is missing.
+- Campaigns can have different fields. Add a field by adding a row, a language by adding a column in the header. A campaign renders only the languages with at least one cell filled in, so `halloween` above produces `en` and `de` only.
+- `field` names are the layer names in the design (`headline` → `#headline`, `badge` → `#badge`, …) and are not case-sensitive. There is no fixed list.
+- An empty cell is not sent, so the design keeps its default for that layer. A cell containing only `-` hides the layer.
+- Keep the blank row between blocks, write `field` in cell A1, and don't merge cells. The workflow stops with an error that names the row if a block is malformed.
 - The sheet holds content only. The **project**, **templates** and **aspect ratios** are chosen in the forms each time you run it, and the lists come live from Creatives (`GET /projects`, then `GET /templates?projectId=…`), so new templates and ratios appear without editing the workflow.
-- Add as many languages as you like: each is just more rows with the same `campaign_id`.
-- An empty cell is not sent, so the design keeps its default for that layer. That is how a creative can use only a subset of headline, body, cta and background. A cell containing only `-` hides the layer.
-- The columns match the `#headline`, `#body`, `#cta` and `#background` layers in the design. To use more fields, add a column and list its name in `FIELDS` in the **Build render jobs** node.
 
-Running the form takes three short steps: an optional campaign (id or name) and language list (for example `en, de`), then the project, then one or more `template/ratio` choices. Each matching row is rendered once per choice, with that `projectId`, and uploaded to Drive as `campaignid_template_language_ratio_timestamp.png`.
+Running the form takes four short steps: the sheet URL, the Drive folder URL and an optional language list (for example `en, de`), then the campaign (listed from the sheet), then the project, then one or more `template/ratio` choices. The flow does not render anything. It queues the campaign (`POST /campaigns`), and the Figma plugin builds it into a page.
+
+- **Emphasis:** wrap part of a text cell in double asterisks (`Shop **now**`). The plugin styles that part like the template layer's own emphasised text (for example the "LOVED" in another font), or the Bold weight of its font if the layer has none.
+
+## Figma plugin
+
+`figma-plugin/` is a development plugin (Figma desktop app → Plugins → Development → Import plugin from manifest → `figma-plugin/manifest.json`). It cannot be triggered from n8n, since Figma only runs plugins inside the app, so it works as an inbox:
+
+1. Run the n8n form. The campaign is queued on the service.
+2. Open the plugin in the file that holds the templates. Under **Connection**, enter the service URL and an API key once. It lists the pending campaigns.
+3. **Generate** creates a page `<date> <campaign>` with one section per language. Each section has a clone of every chosen `template/ratio` frame, named `template/ratio/language`, with the `#fields` filled. Review and adjust it by hand, then export.
+
+- A text value replaces the layer's text, `""` (a `-` in the sheet) hides it, and a missing key keeps the design. An image URL becomes the layer's image fill.
+- Templates are found by name (`template/ratio`) in the open file. Fonts must be installed or shared in the Figma organisation. Tick the Inter fallback to test layout without them.
+- `figma-plugin/seed/` is a throwaway plugin that builds stand-in `H/Desktop` and `H/Mobile` templates for trying this in any file, and `figma-plugin/example-payload.json` can be pasted under "Paste a payload instead".
 
 ## Test
 

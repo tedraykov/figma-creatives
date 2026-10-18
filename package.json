@@ -6,7 +6,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning src/server.js",
-    "test": "node test/render-fixture.js && node test/static-integration.js && node test/snapshot.js && node test/api-keys.js && node test/oidc.js && node test/canva.js && node test/persistence.js"
+    "test": "node test/render-fixture.js && node test/static-integration.js && node test/snapshot.js && node test/api-keys.js && node test/campaigns.js && node test/oidc.js && node test/canva.js && node test/persistence.js"
   },
   "engines": {
     "node": ">=22.13"
