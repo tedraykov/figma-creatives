@@ -4,14 +4,9 @@
     {
       "parameters": {
         "formTitle": "Generate creatives",
-        "formDescription": "Step 1 of 3. Pick the languages to build. The Google Sheet and the Creatives project are set in the Settings node. Next you choose the campaign and the templates, and the campaign is queued for the Figma plugin.",
+        "formDescription": "Step 1 of 3. Click Submit to read the Google Sheet. The sheet and the Creatives project are set in the Settings node. Next you choose the campaign and the templates, and the campaign is queued for the Figma plugin.",
         "formFields": {
-          "values": [
-            {
-              "fieldLabel": "Languages",
-              "placeholder": "e.g. en, de, fr (leave empty for all languages)"
-            }
-          ]
+          "values": []
         },
         "options": {}
       },
@@ -37,7 +32,7 @@
             },
             {
               "id": "b2f0c001-0000-4000-8000-000000000032",
-              "name": "projectName",
+              "name": "figmaProjectName",
               "value": "",
               "type": "string"
             }
@@ -51,7 +46,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1192,
+        1312,
         432
       ]
     },
@@ -74,7 +69,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        1312,
+        1552,
         432
       ]
     },
@@ -87,7 +82,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1552,
+        1792,
         432
       ]
     },
@@ -104,7 +99,7 @@
       "type": "n8n-nodes-base.form",
       "typeVersion": 2.5,
       "position": [
-        1792,
+        2032,
         432
       ],
       "webhookId": "figma-renderer-campaign"
@@ -113,7 +108,7 @@
       "parameters": {
         "url": "https://creatives.tedraykov.me/projects",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpBearerAuth",
         "options": {}
       },
       "id": "b2f0c001-0000-4000-8000-000000000006",
@@ -121,20 +116,20 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2032,
+        2272,
         432
       ]
     },
     {
       "parameters": {
-        "jsCode": "// The project comes from the Settings node. With no projectName, the default project is used.\nconst { projectName } = $('Settings (sheet)').first().json;\nconst projects = $('Get projects').first().json.projects;\nconst name = String(projectName ?? '').trim();\nconst project = name ? projects.find((p) => p.name === name) : projects.find((p) => p.default);\nif (!project) {\n  throw new Error(name\n    ? `Project \"${name}\" is not in Creatives. Set projectName in the Settings node to one of: ${projects.map((p) => p.name).join(', ')}.`\n    : 'No default project in Creatives. Set projectName in the Settings node.');\n}\nreturn [{ json: { Project: project.name } }];\n"
+        "jsCode": "// The project comes from the Settings node. With no figmaProjectName, the default project is used.\nconst { figmaProjectName } = $('Settings (sheet)').first().json;\nconst projects = $('Get projects').first().json.projects;\nconst name = String(figmaProjectName ?? '').trim();\nconst project = name ? projects.find((p) => p.name === name) : projects.find((p) => p.default);\nif (!project) {\n  throw new Error(name\n    ? `Project \"${name}\" is not in Creatives. Set figmaProjectName in the Settings node to one of: ${projects.map((p) => p.name).join(', ')}.`\n    : 'No default project in Creatives. Set figmaProjectName in the Settings node.');\n}\nreturn [{ json: { Project: project.name } }];\n"
       },
       "id": "b2f0c001-0000-4000-8000-000000000007",
       "name": "Pick project",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2272,
+        2512,
         432
       ]
     },
@@ -142,7 +137,7 @@
       "parameters": {
         "url": "https://creatives.tedraykov.me/templates",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpBearerAuth",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -159,7 +154,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2512,
+        2752,
         432
       ]
     },
@@ -176,21 +171,21 @@
       "type": "n8n-nodes-base.form",
       "typeVersion": 2.5,
       "position": [
-        2752,
+        2992,
         432
       ],
       "webhookId": "figma-renderer-creatives"
     },
     {
       "parameters": {
-        "jsCode": "// A campaign is one block of the sheet (see Parse sheet): rows are fields, columns are languages.\n// The output is one payload for the Figma plugin, which builds a page with a frame per language and template/ratio.\n// Text may mark emphasis with **double asterisks**; the plugin styles that part.\n// A cell left empty is not sent, so the design keeps its default for that layer.\n// A cell containing only \"-\" hides the layer (the renderer treats \"\" as hidden).\nconst form = $('Creative form').first().json;\nconst { spreadsheetId, campaigns } = $('Parse sheet').first().json;\nconst label = $('Choose campaign').first().json.Campaign;\nconst campaign = campaigns.find((c) => c.label === label);\nif (!campaign) throw new Error(`Campaign \"${label}\" is no longer in the sheet.`);\nconst date = isoDate(campaign.date);\nif (!date) throw new Error(`The campaign \"${campaign.name}\" needs a date in column B of its title row (for example 12.10.2026), found \"${campaign.date ?? ''}\".`);\nconst projects = $('Get projects').first().json.projects;\nconst projectName = $('Pick project').first().json.Project;\nconst projectId = projects.find((p) => p.name === projectName)?.id;\nif (!projectId) throw new Error(`Project \"${projectName}\" is no longer in Creatives.`);\nconst picked = $('Choose creatives').first().json.Creatives;\nconst creatives = (Array.isArray(picked) ? picked : [picked]).map((v) => {\n  const i = String(v).lastIndexOf('/');\n  return { template: v.slice(0, i), ratio: v.slice(i + 1) };\n});\n\n// The date names the Drive folders in the export flow (year / month / campaign), so it must be readable.\n// Day first for 12.10.2026 style dates; also accepts 2026-10-12 and a raw sheet serial number.\nfunction isoDate(text) {\n  const t = String(text ?? '').trim();\n  let y, m, d;\n  let hit;\n  if ((hit = t.match(/^(\\d{4})[-./](\\d{1,2})[-./](\\d{1,2})$/))) [y, m, d] = hit.slice(1).map(Number);\n  else if ((hit = t.match(/^(\\d{1,2})[-./](\\d{1,2})[-./](\\d{2,4})$/))) { [d, m, y] = hit.slice(1).map(Number); if (y < 100) y += 2000; }\n  else if (/^\\d{5}$/.test(t)) { const x = new Date(Date.UTC(1899, 11, 30) + Number(t) * 86400000); [y, m, d] = [x.getUTCFullYear(), x.getUTCMonth() + 1, x.getUTCDate()]; }\n  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;\n  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;\n}\nconst slug = (s) => String(s ?? '').trim().replace(/\\s+/g, '-').toLowerCase();\nconst wantLanguages = String(form.Languages ?? '').split(',').map(slug).filter(Boolean);\nconst languages = campaign.languages.filter((l) => !wantLanguages.length || wantLanguages.includes(l));\nif (!languages.length) throw new Error(`None of the languages you entered are in \"${campaign.name}\". It has: ${campaign.languages.join(', ')}.`);\n\nconst jobs = [];\nfor (const language of languages) {\n  const data = {};\n  for (const [field, values] of Object.entries(campaign.fields)) {\n    const value = String(values[language] ?? '').trim();\n    if (value === '-') data[field] = '';\n    else if (value !== '') data[field] = value;\n  }\n  for (const { template, ratio } of creatives) {\n    jobs.push({\n      template, ratio, language, data,\n    });\n  }\n}\n// Resolved like the renderer: a missing key keeps the design, \"\" hides the layer.\nreturn [{ json: { campaign: campaign.name, date, jobs } }];\n"
+        "jsCode": "// A campaign is one block of the sheet (see Parse sheet): rows are fields, columns are languages.\n// The output is one payload for the Figma plugin, which builds a page with a frame per language and template/ratio.\n// Text may mark emphasis with **double asterisks**; the plugin styles that part.\n// A cell left empty is not sent, so the design keeps its default for that layer.\n// A cell containing only \"-\" hides the layer (the renderer treats \"\" as hidden).\n// A cell holding a Google Drive file link (images such as the background) is turned into a direct download URL.\nconst { spreadsheetId, campaigns } = $('Parse sheet').first().json;\nconst label = $('Choose campaign').first().json.Campaign;\nconst campaign = campaigns.find((c) => c.label === label);\nif (!campaign) throw new Error(`Campaign \"${label}\" is no longer in the sheet.`);\nconst date = isoDate(campaign.date);\nif (!date) throw new Error(`The campaign \"${campaign.name}\" needs a date in column B of its title row (for example 12.10.2026), found \"${campaign.date ?? ''}\".`);\nconst projects = $('Get projects').first().json.projects;\nconst projectName = $('Pick project').first().json.Project;\nconst projectId = projects.find((p) => p.name === projectName)?.id;\nif (!projectId) throw new Error(`Project \"${projectName}\" is no longer in Creatives.`);\nconst picked = $('Choose creatives').first().json.Creatives;\nconst creatives = (Array.isArray(picked) ? picked : [picked]).map((v) => {\n  const i = String(v).lastIndexOf('/');\n  return { template: v.slice(0, i), ratio: v.slice(i + 1) };\n});\n\n// The date names the Drive folders in the export flow (year / month / campaign), so it must be readable.\n// Day first for 12.10.2026 style dates; also accepts 2026-10-12 and a raw sheet serial number.\nfunction isoDate(text) {\n  const t = String(text ?? '').trim();\n  let y, m, d;\n  let hit;\n  if ((hit = t.match(/^(\\d{4})[-./](\\d{1,2})[-./](\\d{1,2})$/))) [y, m, d] = hit.slice(1).map(Number);\n  else if ((hit = t.match(/^(\\d{1,2})[-./](\\d{1,2})[-./](\\d{2,4})$/))) { [d, m, y] = hit.slice(1).map(Number); if (y < 100) y += 2000; }\n  else if (/^\\d{5}$/.test(t)) { const x = new Date(Date.UTC(1899, 11, 30) + Number(t) * 86400000); [y, m, d] = [x.getUTCFullYear(), x.getUTCMonth() + 1, x.getUTCDate()]; }\n  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;\n  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;\n}\n// drive.google.com/file/d/ID/view, drive.google.com/open?id=ID and drive.google.com/uc?id=ID become a direct download.\n// The file must be shared as \"Anyone with the link\". Folder links and other URLs are left alone.\nfunction driveImage(text) {\n  const t = String(text);\n  if (!/^https?:\\/\\/(drive|docs)\\.google\\.com\\//.test(t)) return t;\n  const id = t.match(/\\/file\\/d\\/([A-Za-z0-9_-]+)/)?.[1] ?? t.match(/[?&]id=([A-Za-z0-9_-]+)/)?.[1];\n  return id ? `https://drive.usercontent.google.com/download?id=${id}&export=download` : t;\n}\nconst languages = campaign.languages;\nif (!languages.length) throw new Error(`\"${campaign.name}\" has no language with a filled-in cell.`);\n\nconst jobs = [];\nfor (const language of languages) {\n  const data = {};\n  for (const [field, values] of Object.entries(campaign.fields)) {\n    const value = String(values[language] ?? '').trim();\n    if (value === '-') data[field] = '';\n    else if (value !== '') data[field] = driveImage(value);\n  }\n  for (const { template, ratio } of creatives) {\n    jobs.push({\n      template, ratio, language, data,\n    });\n  }\n}\n// Resolved like the renderer: a missing key keeps the design, \"\" hides the layer.\nreturn [{ json: { campaign: campaign.name, date, jobs } }];\n"
       },
       "id": "b2f0c001-0000-4000-8000-000000000002",
       "name": "Build campaign",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2992,
+        3232,
         432
       ]
     },
@@ -199,7 +194,7 @@
         "method": "POST",
         "url": "https://creatives.tedraykov.me/campaigns",
         "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "genericAuthType": "httpBearerAuth",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
@@ -210,7 +205,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3232,
+        3472,
         432
       ]
     },
@@ -226,14 +221,14 @@
       "type": "n8n-nodes-base.form",
       "typeVersion": 2.5,
       "position": [
-        3472,
+        3712,
         432
       ],
       "webhookId": "figma-renderer-queued"
     },
     {
       "parameters": {
-        "content": "## Creatives from Google Sheets\n1. Credentials: Google Sheets OAuth2 for **Read sheet**, and a Header Auth credential for the three **Creatives** HTTP nodes (`Get projects`, `Get templates`, `Queue campaign`).\n2. Open the **Settings (sheet)** node. `sheetUrl` is the Google Sheet with the month's campaigns; `projectName` is the Creatives project to build in (leave it empty to use the default project). Edit those values and save, the form no longer asks for them.",
+        "content": "## Creatives from Google Sheets\n1. Credentials: Google Sheets OAuth2 for **Read sheet**, and a Bearer Auth credential (token = a key from Creatives **Settings → API keys**) for the three **Creatives** HTTP nodes (`Get projects`, `Get templates`, `Queue campaign`).\n2. Open the **Settings (sheet)** node. `sheetUrl` is the Google Sheet with the month's campaigns; `figmaProjectName` is the Creatives project to build in (leave it empty to use the default project). Edit those values and save, the form no longer asks for them.",
         "height": 240,
         "width": 520
       },
@@ -250,7 +245,7 @@
       "parameters": {
         "content": "### 1. Load campaigns\nForm (languages), the sheet and project from Settings, reads the Google Sheet and groups it into campaigns.",
         "height": 400,
-        "width": 680,
+        "width": 880,
         "color": 7
       },
       "id": "b2f0c001-0000-4000-8000-000000000100",
@@ -258,8 +253,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1032,
-        250
+        1040,
+        256
       ]
     },
     {
@@ -274,8 +269,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1752,
-        250
+        2000,
+        256
       ]
     },
     {
@@ -290,8 +285,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2472,
-        250
+        2720,
+        256
       ]
     },
     {
@@ -306,8 +301,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2952,
-        250
+        3200,
+        256
       ]
     },
     {
@@ -359,6 +354,12 @@
               "name": "driveRootFolderUrl",
               "value": "https://drive.google.com/drive/folders/REPLACE_WITH_YOUR_ROOT_FOLDER",
               "type": "string"
+            },
+            {
+              "id": "b2f0c002-0000-4000-8000-000000000031",
+              "name": "noSuffixFormats",
+              "value": "Desktop",
+              "type": "string"
             }
           ]
         },
@@ -370,20 +371,20 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1192,
+        1312,
         1232
       ]
     },
     {
       "parameters": {
-        "jsCode": "// Reads the page link from the form and the Drive root from the Settings node.\nconst form = $input.first().json;\nconst link = String(form['Figma page URL'] ?? '').trim();\nconst file = link.match(/figma\\.com\\/(?:design|file)\\/([A-Za-z0-9]+)/);\nif (!file) throw new Error('The Figma page URL is not a figma.com/design link.');\n// Regex instead of new URL(): URL is not reliably available in the Code node sandbox.\nconst node = (link.match(/[?&]node-id=([^&#]+)/)?.[1] ?? '').replace(/%3A/i, ':').replace('-', ':');\nif (!node) throw new Error('The link has no node-id. In Figma, right-click the campaign page in the Pages list and choose Copy link.');\n\nconst root = String(form.driveRootFolderUrl ?? '').trim();\nconst rootId = root.match(/folders\\/([A-Za-z0-9_-]+)/)?.[1] ?? (/^[A-Za-z0-9_-]{15,}$/.test(root) ? root : null);\nif (!rootId || root.includes('REPLACE_WITH')) throw new Error('Set the Drive root folder URL in the Settings node (a drive.google.com/drive/folders/… link).');\n\nreturn [{ json: { fileKey: file[1], nodeId: node, rootId, scale: parseInt(form.Scale, 10) || 1 } }];\n"
+        "jsCode": "// Reads the page link from the form and the Drive root from the Settings node.\nconst form = $input.first().json;\nconst link = String(form['Figma page URL'] ?? '').trim();\nconst file = link.match(/figma\\.com\\/(?:design|file)\\/([A-Za-z0-9]+)/);\nif (!file) throw new Error('The Figma page URL is not a figma.com/design link.');\n// Regex instead of new URL(): URL is not reliably available in the Code node sandbox.\nconst node = (link.match(/[?&]node-id=([^&#]+)/)?.[1] ?? '').replace(/%3A/i, ':').replace('-', ':');\nif (!node) throw new Error('The link has no node-id. In Figma, right-click the campaign page in the Pages list and choose Copy link.');\n\nconst root = String(form.driveRootFolderUrl ?? '').trim();\nconst rootId = root.match(/folders\\/([A-Za-z0-9_-]+)/)?.[1] ?? (/^[A-Za-z0-9_-]{15,}$/.test(root) ? root : null);\nif (!rootId || root.includes('REPLACE_WITH')) throw new Error('Set the Drive root folder URL in the Settings node (a drive.google.com/drive/folders/… link).');\n\n// Formats listed here (comma separated, any case) keep the plain file name; every other format gets \"-<format>\" added.\nconst noSuffix = String(form.noSuffixFormats ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);\n\nreturn [{ json: { fileKey: file[1], nodeId: node, rootId, scale: parseInt(form.Scale, 10) || 1, noSuffix } }];\n"
       },
       "id": "b2f0c002-0000-4000-8000-000000000002",
       "name": "Parse form",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1312,
+        1552,
         1232
       ]
     },
@@ -399,20 +400,20 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1552,
+        1792,
         1232
       ]
     },
     {
       "parameters": {
-        "jsCode": "// The page name is \"DD.MM.YYYY Campaign title\" (the plugin names it so). Frames are \"template/ratio/language\".\n// Hidden frames are skipped, so hide any you do not want exported.\nconst { fileKey, nodeId, rootId, scale } = $('Parse form').first().json;\nconst page = $input.first().json.nodes?.[nodeId]?.document;\nif (!page) throw new Error('Figma did not return that page. Check the link and that the token can read the file.');\nif (page.type !== 'CANVAS') throw new Error(`That link points to a ${page.type.toLowerCase()}, not a page. Right-click the campaign page in the Pages list and choose Copy link.`);\n\nconst head = page.name.match(/^(\\d{2})\\.(\\d{2})\\.(\\d{4})\\s+(.+)$/);\nif (!head) throw new Error(`The page is named \"${page.name}\". It must start with the campaign date, like \"12.10.2026 Autumn Sale\".`);\nconst [, dd, mm, yyyy, title] = head;\nconst MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];\nif (Number(mm) < 1 || Number(mm) > 12) throw new Error(`\"${page.name}\" has no valid month.`);\n\nconst NAME = /^([^/]+)\\/([^/]+)\\/([^/]+)$/;\nconst frames = [];\nconst walk = (n) => {\n  for (const c of n.children ?? []) {\n    if (c.visible === false) continue;\n    if (c.type === 'SECTION') walk(c);\n    else if (c.type === 'FRAME') {\n      const m = c.name.match(NAME);\n      if (m) frames.push({ id: c.id, template: m[1].trim(), ratio: m[2].trim(), language: m[3].trim() });\n    }\n  }\n};\nwalk(page);\nif (!frames.length) throw new Error(`No frames named template/ratio/language on \"${page.name}\".`);\n\n// One template per campaign, so each format folder holds DDMM-CC-LANG.jpg once per language.\nconst seen = new Map();\nfor (const f of frames) {\n  f.fileName = `${dd}${mm}-CC-${f.language.toUpperCase()}.jpg`;\n  const slot = `${f.ratio}/${f.fileName}`;\n  if (seen.has(slot)) throw new Error(`\"${seen.get(slot)}\" and \"${f.template}/${f.ratio}/${f.language}\" would both become ${slot}. A campaign page should use one template; hide or rename one.`);\n  seen.set(slot, `${f.template}/${f.ratio}/${f.language}`);\n}\n\nreturn [{ json: {\n  fileKey, rootId, scale, frames,\n  year: yyyy, month: `${mm}. ${MONTHS[Number(mm) - 1]}`, campaign: `${dd}.${mm}.${yyyy} ${title.trim()}`,\n  ratios: [...new Set(frames.map((f) => f.ratio))],\n} }];\n"
+        "jsCode": "// The page name is \"DD.MM.YYYY Campaign title\" (the plugin names it so). Frames are \"template/ratio/language\".\n// Hidden frames are skipped, so hide any you do not want exported.\nconst { fileKey, nodeId, rootId, scale, noSuffix } = $('Parse form').first().json;\nconst page = $input.first().json.nodes?.[nodeId]?.document;\nif (!page) throw new Error('Figma did not return that page. Check the link and that the token can read the file.');\nif (page.type !== 'CANVAS') throw new Error(`That link points to a ${page.type.toLowerCase()}, not a page. Right-click the campaign page in the Pages list and choose Copy link.`);\n\nconst head = page.name.match(/^(\\d{2})\\.(\\d{2})\\.(\\d{4})\\s+(.+)$/);\nif (!head) throw new Error(`The page is named \"${page.name}\". It must start with the campaign date, like \"12.10.2026 Autumn Sale\".`);\nconst [, dd, mm, yyyy, title] = head;\nconst MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];\nif (Number(mm) < 1 || Number(mm) > 12) throw new Error(`\"${page.name}\" has no valid month.`);\n\nconst NAME = /^([^/]+)\\/([^/]+)\\/([^/]+)$/;\nconst frames = [];\nconst walk = (n) => {\n  for (const c of n.children ?? []) {\n    if (c.visible === false) continue;\n    if (c.type === 'SECTION') walk(c);\n    else if (c.type === 'FRAME') {\n      const m = c.name.match(NAME);\n      if (m) frames.push({ id: c.id, template: m[1].trim(), ratio: m[2].trim(), language: m[3].trim() });\n    }\n  }\n};\nwalk(page);\nif (!frames.length) throw new Error(`No frames named template/ratio/language on \"${page.name}\".`);\n\n// One template per campaign, so each format folder holds DDMM-CC-LANG[-Format].jpg once per language.\nconst seen = new Map();\nfor (const f of frames) {\n  const suffix = noSuffix.includes(f.ratio.toLowerCase()) ? '' : `-${f.ratio}`;\n  f.fileName = `${dd}${mm}-CC-${f.language.toUpperCase()}${suffix}.jpg`;\n  const slot = `${f.ratio}/${f.fileName}`;\n  if (seen.has(slot)) throw new Error(`\"${seen.get(slot)}\" and \"${f.template}/${f.ratio}/${f.language}\" would both become ${slot}. A campaign page should use one template; hide or rename one.`);\n  seen.set(slot, `${f.template}/${f.ratio}/${f.language}`);\n}\n\nreturn [{ json: {\n  fileKey, rootId, scale, frames,\n  year: yyyy, month: `${mm}. ${MONTHS[Number(mm) - 1]}`, campaign: `${dd}.${mm}.${yyyy} ${title.trim()}`,\n  ratios: [...new Set(frames.map((f) => f.ratio))],\n} }];\n"
       },
       "id": "b2f0c002-0000-4000-8000-000000000004",
       "name": "Plan export",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1792,
+        2032,
         1232
       ]
     },
@@ -425,7 +426,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2032,
+        2272,
         1232
       ]
     },
@@ -460,7 +461,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2272,
+        2512,
         1232
       ],
       "retryOnFail": true,
@@ -476,377 +477,497 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2512,
-        1232
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const p = $('Image URLs').first().json;\nreturn [{ json: { name: p.year, parentId: p.rootId } }];\n"
-      },
-      "id": "b2f0c002-0000-4000-8000-000000000008",
-      "name": "Plan year",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
         2752,
         1232
       ]
     },
     {
+      "name": "List year",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
       "parameters": {
-        "url": "https://www.googleapis.com/drive/v3/files",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleDriveOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "q",
-              "value": "={{ \"name = '\" + $json.name.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\") + \"' and '\" + $json.parentId + \"' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false\" }}"
-            },
-            {
-              "name": "fields",
-              "value": "files(id,name)"
-            },
-            {
-              "name": "pageSize",
-              "value": "1"
-            },
-            {
-              "name": "supportsAllDrives",
-              "value": "true"
-            },
-            {
-              "name": "includeItemsFromAllDrives",
-              "value": "true"
-            },
-            {
-              "name": "corpora",
-              "value": "allDrives"
-            }
-          ]
+        "resource": "fileFolder",
+        "operation": "search",
+        "returnAll": true,
+        "filter": {
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('Image URLs').first().json.rootId }}"
+          },
+          "whatToSearch": "folders"
         },
-        "options": {}
+        "options": {
+          "fields": [
+            "id",
+            "name"
+          ]
+        }
       },
-      "id": "b2f0c002-0000-4000-8000-000000000009",
-      "name": "Find year",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
       "position": [
-        2992,
+        2960,
         1232
-      ]
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "b2f0c002-0000-4000-8000-000000000900"
     },
     {
+      "name": "Mark year",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "parameters": {
-        "method": "={{ $json.files.length ? 'PATCH' : 'POST' }}",
-        "url": "={{ $json.files.length ? 'https://www.googleapis.com/drive/v3/files/' + $json.files[0].id : 'https://www.googleapis.com/drive/v3/files' }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleDriveOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
+        "jsCode": "// Compares the folders wanted at this level with the folders that already exist under the parent.\n// Each item leaves with the id of the existing folder, or an empty id when it still has to be created.\nconst p = $('Image URLs').first().json;\nconst parentId = $('Image URLs').first().json.rootId;\nconst have = new Map($input.all().filter((i) => i.json.name).map((i) => [i.json.name, i.json.id]));\nconst wanted = [{ name: p.year, parentId }];\nreturn wanted.map((w) => ({ json: { ...w, id: have.get(w.name) ?? '' } }));\n"
+      },
+      "position": [
+        3200,
+        1232
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000901"
+    },
+    {
+      "name": "Year missing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "name": "fields",
-              "value": "id,name"
-            },
-            {
-              "name": "supportsAllDrives",
-              "value": "true"
+              "id": "8fa02677-16dc-4360-b7bc-000d36c6f9c8",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.files.length ? {} : { name: $('Plan year').item.json.name, mimeType: 'application/vnd.google-apps.folder', parents: [$('Plan year').item.json.parentId] }) }}",
         "options": {}
       },
-      "id": "b2f0c002-0000-4000-8000-000000000010",
+      "position": [
+        3440,
+        1232
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000902"
+    },
+    {
+      "name": "Create year",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "parameters": {
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $json.name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.parentId }}"
+        },
+        "options": {}
+      },
+      "position": [
+        3680,
+        1352
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000903"
+    },
+    {
       "name": "Ensure year",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "parameters": {
+        "mode": "append"
+      },
       "position": [
-        3232,
+        3920,
         1232
-      ]
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000904"
     },
     {
+      "name": "List month",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
       "parameters": {
-        "jsCode": "const p = $('Image URLs').first().json;\nreturn [{ json: { name: p.month, parentId: $('Ensure year').first().json.id } }];\n"
+        "resource": "fileFolder",
+        "operation": "search",
+        "returnAll": true,
+        "filter": {
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('Ensure year').first().json.id }}"
+          },
+          "whatToSearch": "folders"
+        },
+        "options": {
+          "fields": [
+            "id",
+            "name"
+          ]
+        }
       },
-      "id": "b2f0c002-0000-4000-8000-000000000011",
-      "name": "Plan month",
+      "position": [
+        2960,
+        1532
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "b2f0c002-0000-4000-8000-000000000905"
+    },
+    {
+      "name": "Mark month",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Compares the folders wanted at this level with the folders that already exist under the parent.\n// Each item leaves with the id of the existing folder, or an empty id when it still has to be created.\nconst p = $('Image URLs').first().json;\nconst parentId = $('Ensure year').first().json.id;\nconst have = new Map($input.all().filter((i) => i.json.name).map((i) => [i.json.name, i.json.id]));\nconst wanted = [{ name: p.month, parentId }];\nreturn wanted.map((w) => ({ json: { ...w, id: have.get(w.name) ?? '' } }));\n"
+      },
       "position": [
-        3472,
-        1232
-      ]
+        3200,
+        1532
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000906"
     },
     {
+      "name": "Month missing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
       "parameters": {
-        "url": "https://www.googleapis.com/drive/v3/files",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleDriveOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "name": "q",
-              "value": "={{ \"name = '\" + $json.name.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\") + \"' and '\" + $json.parentId + \"' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false\" }}"
-            },
-            {
-              "name": "fields",
-              "value": "files(id,name)"
-            },
-            {
-              "name": "pageSize",
-              "value": "1"
-            },
-            {
-              "name": "supportsAllDrives",
-              "value": "true"
-            },
-            {
-              "name": "includeItemsFromAllDrives",
-              "value": "true"
-            },
-            {
-              "name": "corpora",
-              "value": "allDrives"
+              "id": "3e873b1a-bd06-434d-8eeb-db450a3f687b",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         },
         "options": {}
       },
-      "id": "b2f0c002-0000-4000-8000-000000000012",
-      "name": "Find month",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
       "position": [
-        3712,
-        1232
-      ]
+        3440,
+        1532
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000907"
     },
     {
+      "name": "Create month",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
       "parameters": {
-        "method": "={{ $json.files.length ? 'PATCH' : 'POST' }}",
-        "url": "={{ $json.files.length ? 'https://www.googleapis.com/drive/v3/files/' + $json.files[0].id : 'https://www.googleapis.com/drive/v3/files' }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleDriveOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "fields",
-              "value": "id,name"
-            },
-            {
-              "name": "supportsAllDrives",
-              "value": "true"
-            }
-          ]
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $json.name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
         },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.files.length ? {} : { name: $('Plan month').item.json.name, mimeType: 'application/vnd.google-apps.folder', parents: [$('Plan month').item.json.parentId] }) }}",
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.parentId }}"
+        },
         "options": {}
       },
-      "id": "b2f0c002-0000-4000-8000-000000000013",
+      "position": [
+        3680,
+        1652
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000908"
+    },
+    {
       "name": "Ensure month",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "parameters": {
+        "mode": "append"
+      },
       "position": [
-        3952,
-        1232
-      ]
+        3920,
+        1532
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000909"
     },
     {
+      "name": "List campaign",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
       "parameters": {
-        "jsCode": "const p = $('Image URLs').first().json;\nreturn [{ json: { name: p.campaign, parentId: $('Ensure month').first().json.id } }];\n"
+        "resource": "fileFolder",
+        "operation": "search",
+        "returnAll": true,
+        "filter": {
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('Ensure month').first().json.id }}"
+          },
+          "whatToSearch": "folders"
+        },
+        "options": {
+          "fields": [
+            "id",
+            "name"
+          ]
+        }
       },
-      "id": "b2f0c002-0000-4000-8000-000000000014",
-      "name": "Plan campaign",
+      "position": [
+        2960,
+        1832
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "b2f0c002-0000-4000-8000-000000000910"
+    },
+    {
+      "name": "Mark campaign",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Compares the folders wanted at this level with the folders that already exist under the parent.\n// Each item leaves with the id of the existing folder, or an empty id when it still has to be created.\nconst p = $('Image URLs').first().json;\nconst parentId = $('Ensure month').first().json.id;\nconst have = new Map($input.all().filter((i) => i.json.name).map((i) => [i.json.name, i.json.id]));\nconst wanted = [{ name: p.campaign, parentId }];\nreturn wanted.map((w) => ({ json: { ...w, id: have.get(w.name) ?? '' } }));\n"
+      },
       "position": [
-        4192,
-        1232
-      ]
+        3200,
+        1832
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000911"
     },
     {
+      "name": "Campaign missing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
       "parameters": {
-        "url": "https://www.googleapis.com/drive/v3/files",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleDriveOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "name": "q",
-              "value": "={{ \"name = '\" + $json.name.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\") + \"' and '\" + $json.parentId + \"' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false\" }}"
-            },
-            {
-              "name": "fields",
-              "value": "files(id,name)"
-            },
-            {
-              "name": "pageSize",
-              "value": "1"
-            },
-            {
-              "name": "supportsAllDrives",
-              "value": "true"
-            },
-            {
-              "name": "includeItemsFromAllDrives",
-              "value": "true"
-            },
-            {
-              "name": "corpora",
-              "value": "allDrives"
+              "id": "fbc1ffe7-53ff-4c4e-9585-987c26e56172",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         },
         "options": {}
       },
-      "id": "b2f0c002-0000-4000-8000-000000000015",
-      "name": "Find campaign",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
       "position": [
-        4432,
-        1232
-      ]
+        3440,
+        1832
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000912"
     },
     {
+      "name": "Create campaign",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
       "parameters": {
-        "method": "={{ $json.files.length ? 'PATCH' : 'POST' }}",
-        "url": "={{ $json.files.length ? 'https://www.googleapis.com/drive/v3/files/' + $json.files[0].id : 'https://www.googleapis.com/drive/v3/files' }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleDriveOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "fields",
-              "value": "id,name"
-            },
-            {
-              "name": "supportsAllDrives",
-              "value": "true"
-            }
-          ]
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $json.name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
         },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.files.length ? {} : { name: $('Plan campaign').item.json.name, mimeType: 'application/vnd.google-apps.folder', parents: [$('Plan campaign').item.json.parentId] }) }}",
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.parentId }}"
+        },
         "options": {}
       },
-      "id": "b2f0c002-0000-4000-8000-000000000016",
+      "position": [
+        3680,
+        1952
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000913"
+    },
+    {
       "name": "Ensure campaign",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "parameters": {
+        "mode": "append"
+      },
       "position": [
-        4672,
-        1232
-      ]
+        3920,
+        1832
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000914"
     },
     {
+      "name": "List format",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
       "parameters": {
-        "jsCode": "// One folder per format (the ratio part of the frame names), for example Desktop and Mobile.\nconst p = $('Image URLs').first().json;\nconst parentId = $('Ensure campaign').first().json.id;\nreturn p.ratios.map((name) => ({ json: { name, parentId } }));\n"
+        "resource": "fileFolder",
+        "operation": "search",
+        "returnAll": true,
+        "filter": {
+          "driveId": {
+            "__rl": true,
+            "mode": "list",
+            "value": "My Drive"
+          },
+          "folderId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "={{ $('Ensure campaign').first().json.id }}"
+          },
+          "whatToSearch": "folders"
+        },
+        "options": {
+          "fields": [
+            "id",
+            "name"
+          ]
+        }
       },
-      "id": "b2f0c002-0000-4000-8000-000000000017",
-      "name": "Plan format",
+      "position": [
+        2960,
+        2132
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "id": "b2f0c002-0000-4000-8000-000000000915"
+    },
+    {
+      "name": "Mark format",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "parameters": {
+        "jsCode": "// Compares the folders wanted at this level with the folders that already exist under the parent.\n// Each item leaves with the id of the existing folder, or an empty id when it still has to be created.\nconst p = $('Image URLs').first().json;\nconst parentId = $('Ensure campaign').first().json.id;\nconst have = new Map($input.all().filter((i) => i.json.name).map((i) => [i.json.name, i.json.id]));\nconst wanted = p.ratios.map((name) => ({ name, parentId }));\nreturn wanted.map((w) => ({ json: { ...w, id: have.get(w.name) ?? '' } }));\n"
+      },
       "position": [
-        4912,
-        1232
-      ]
+        3200,
+        2132
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000916"
     },
     {
+      "name": "Format missing?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
       "parameters": {
-        "url": "https://www.googleapis.com/drive/v3/files",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleDriveOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "name": "q",
-              "value": "={{ \"name = '\" + $json.name.replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"\\\\'\") + \"' and '\" + $json.parentId + \"' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false\" }}"
-            },
-            {
-              "name": "fields",
-              "value": "files(id,name)"
-            },
-            {
-              "name": "pageSize",
-              "value": "1"
-            },
-            {
-              "name": "supportsAllDrives",
-              "value": "true"
-            },
-            {
-              "name": "includeItemsFromAllDrives",
-              "value": "true"
-            },
-            {
-              "name": "corpora",
-              "value": "allDrives"
+              "id": "49edb872-9b07-4365-92a3-d22ada430d0a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         },
         "options": {}
       },
-      "id": "b2f0c002-0000-4000-8000-000000000018",
-      "name": "Find format",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
       "position": [
-        5152,
-        1232
-      ]
+        3440,
+        2132
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000917"
     },
     {
+      "name": "Create format",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
       "parameters": {
-        "method": "={{ $json.files.length ? 'PATCH' : 'POST' }}",
-        "url": "={{ $json.files.length ? 'https://www.googleapis.com/drive/v3/files/' + $json.files[0].id : 'https://www.googleapis.com/drive/v3/files' }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "googleDriveOAuth2Api",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "fields",
-              "value": "id,name"
-            },
-            {
-              "name": "supportsAllDrives",
-              "value": "true"
-            }
-          ]
+        "resource": "folder",
+        "operation": "create",
+        "name": "={{ $json.name }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
         },
-        "sendBody": true,
-        "contentType": "json",
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.files.length ? {} : { name: $('Plan format').item.json.name, mimeType: 'application/vnd.google-apps.folder', parents: [$('Plan format').item.json.parentId] }) }}",
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.parentId }}"
+        },
         "options": {}
       },
-      "id": "b2f0c002-0000-4000-8000-000000000019",
+      "position": [
+        3680,
+        2252
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000918"
+    },
+    {
       "name": "Ensure format",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "parameters": {
+        "mode": "append"
+      },
       "position": [
-        5392,
-        1232
-      ]
+        3920,
+        2132
+      ],
+      "id": "b2f0c002-0000-4000-8000-000000000919"
     },
     {
       "parameters": {
@@ -857,7 +978,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        5632,
+        4160,
         1232
       ]
     },
@@ -878,7 +999,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5872,
+        4400,
         1232
       ]
     },
@@ -905,7 +1026,7 @@
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
       "position": [
-        6112,
+        4640,
         1232
       ]
     },
@@ -918,7 +1039,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6352,
+        4880,
         1232
       ]
     },
@@ -934,14 +1055,14 @@
       "type": "n8n-nodes-base.form",
       "typeVersion": 2.5,
       "position": [
-        6592,
+        5120,
         1232
       ],
       "webhookId": "figma-renderer-exported"
     },
     {
       "parameters": {
-        "content": "## Export a campaign page to Drive\n1. Credentials: a Header Auth credential for the two **Figma** HTTP nodes (name `X-Figma-Token`, value your Figma token), and a Google Drive OAuth2 credential for every **Drive** node (the `Find …` and `Ensure …` HTTP nodes use it as a predefined credential, plus **Upload to Drive**).\n2. Drive root folder: open the **Settings** node and change `driveRootFolderUrl` to your folder's link (a `drive.google.com/drive/folders/…` URL). Every export is filed under it, so it is not asked in the form. To use another folder, edit that value and save.\n3. Folders: root / year / `MM. Month` / `DD.MM.YYYY Campaign` / format. Files: `DDMM-CC-LANG.jpg`.\nUploads go to *My Drive*. For a shared drive, pick it in **Upload to Drive**.",
+        "content": "## Export a campaign page to Drive\n1. Credentials: a Header Auth credential for the two **Figma** HTTP nodes (name `X-Figma-Token`, value your Figma token), and a Google Drive OAuth2 credential for every **Drive** node (the `List …` and `Create …` folder nodes, plus **Upload to Drive**).\n2. Drive root folder: open the **Settings** node and change `driveRootFolderUrl` to your folder's link (a `drive.google.com/drive/folders/…` URL). Every export is filed under it, so it is not asked in the form. To use another folder, edit that value and save.\n3. File names: `DDMM-CC-LANG.jpg` for the formats listed in `noSuffixFormats` (Settings node, comma separated, default `Desktop`), and `DDMM-CC-LANG-Format.jpg` for every other format (for example `-Mobile`).\n4. Folders: root / year / `MM. Month` / `DD.MM.YYYY Campaign` / format.\nUploads go to *My Drive*. For a shared drive, pick it in **Upload to Drive**.",
         "height": 240,
         "width": 520
       },
@@ -958,7 +1079,7 @@
       "parameters": {
         "content": "### 1. Input\nForm, the Drive root from Settings, and the page link parsed into file key and node id.",
         "height": 400,
-        "width": 440,
+        "width": 680,
         "color": 7
       },
       "id": "b2f0c002-0000-4000-8000-000000000100",
@@ -966,8 +1087,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1032,
-        1050
+        1040,
+        1056
       ]
     },
     {
@@ -982,8 +1103,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1512,
-        1050
+        1760,
+        1056
       ]
     },
     {
@@ -998,15 +1119,15 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        1972,
-        1050
+        2208,
+        1056
       ]
     },
     {
       "parameters": {
-        "content": "### 4. Create Drive folders\nFinds or creates year / month / campaign / format folders, one level at a time (Plan, Find, Ensure).",
-        "height": 400,
-        "width": 2860,
+        "content": "### 4. Create Drive folders\nFinds or creates year / month / campaign / format folders, one level at a time. Each level lists the parent's folders (List), marks which are missing (Mark), creates those (Create) and merges them back (Ensure).",
+        "height": 1400,
+        "width": 1160,
         "color": 6
       },
       "id": "b2f0c002-0000-4000-8000-000000000103",
@@ -1014,8 +1135,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2692,
-        1050
+        2928,
+        1056
       ]
     },
     {
@@ -1030,8 +1151,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        5592,
-        1050
+        4128,
+        1056
       ]
     },
     {
@@ -1046,8 +1167,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        6312,
-        1050
+        4848,
+        1056
       ]
     }
   ],
@@ -1243,139 +1364,7 @@
       "main": [
         [
           {
-            "node": "Plan year",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Plan year": {
-      "main": [
-        [
-          {
-            "node": "Find year",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Find year": {
-      "main": [
-        [
-          {
-            "node": "Ensure year",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Ensure year": {
-      "main": [
-        [
-          {
-            "node": "Plan month",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Plan month": {
-      "main": [
-        [
-          {
-            "node": "Find month",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Find month": {
-      "main": [
-        [
-          {
-            "node": "Ensure month",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Ensure month": {
-      "main": [
-        [
-          {
-            "node": "Plan campaign",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Plan campaign": {
-      "main": [
-        [
-          {
-            "node": "Find campaign",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Find campaign": {
-      "main": [
-        [
-          {
-            "node": "Ensure campaign",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Ensure campaign": {
-      "main": [
-        [
-          {
-            "node": "Plan format",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Plan format": {
-      "main": [
-        [
-          {
-            "node": "Find format",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Find format": {
-      "main": [
-        [
-          {
-            "node": "Ensure format",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Ensure format": {
-      "main": [
-        [
-          {
-            "node": "Upload items",
+            "node": "List year",
             "type": "main",
             "index": 0
           }
@@ -1431,6 +1420,254 @@
         [
           {
             "node": "Parse form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List year": {
+      "main": [
+        [
+          {
+            "node": "Mark year",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark year": {
+      "main": [
+        [
+          {
+            "node": "Year missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Year missing?": {
+      "main": [
+        [
+          {
+            "node": "Create year",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ensure year",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create year": {
+      "main": [
+        [
+          {
+            "node": "Ensure year",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List month": {
+      "main": [
+        [
+          {
+            "node": "Mark month",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark month": {
+      "main": [
+        [
+          {
+            "node": "Month missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Month missing?": {
+      "main": [
+        [
+          {
+            "node": "Create month",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ensure month",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create month": {
+      "main": [
+        [
+          {
+            "node": "Ensure month",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure year": {
+      "main": [
+        [
+          {
+            "node": "List month",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List campaign": {
+      "main": [
+        [
+          {
+            "node": "Mark campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark campaign": {
+      "main": [
+        [
+          {
+            "node": "Campaign missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Campaign missing?": {
+      "main": [
+        [
+          {
+            "node": "Create campaign",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ensure campaign",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create campaign": {
+      "main": [
+        [
+          {
+            "node": "Ensure campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure month": {
+      "main": [
+        [
+          {
+            "node": "List campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List format": {
+      "main": [
+        [
+          {
+            "node": "Mark format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark format": {
+      "main": [
+        [
+          {
+            "node": "Format missing?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format missing?": {
+      "main": [
+        [
+          {
+            "node": "Create format",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ensure format",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create format": {
+      "main": [
+        [
+          {
+            "node": "Ensure format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure campaign": {
+      "main": [
+        [
+          {
+            "node": "List format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure format": {
+      "main": [
+        [
+          {
+            "node": "Upload items",
             "type": "main",
             "index": 0
           }

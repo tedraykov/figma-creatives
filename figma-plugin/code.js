@@ -15,7 +15,12 @@ const TEMPLATE_NAME = /^\s*([^/]+?)\s*\/\s*([^/]+?)\s*$/;
 
 figma.showUI(__html__, { width: 420, height: 600 });
 
-const DEFAULTS = { baseUrl: 'https://creatives.tedraykov.me', apiKey: '' };
+// queueFormUrl / exportFormUrl are the production URLs of the two n8n form triggers (Creative form, Export form).
+const DEFAULTS = {
+  baseUrl: 'https://creatives.tedraykov.me', apiKey: '',
+  queueFormUrl: 'https://n8n.tedraykov.me/form/96f7a369-fe8e-4f50-a8d0-5fe230793ae1',
+  exportFormUrl: 'https://n8n.tedraykov.me/form/a6059373-4dca-454f-9874-b7f70815204a',
+};
 
 const log = (text, level = 'info') => figma.ui.postMessage({ type: 'log', level, text });
 
@@ -208,6 +213,8 @@ figma.ui.onmessage = async (msg) => {
     figma.ui.postMessage({ type: 'settings', settings: { ...DEFAULTS, ...(saved || {}) } });
   } else if (msg.type === 'saveSettings') {
     await figma.clientStorage.setAsync('settings', msg.settings);
+  } else if (msg.type === 'openForm') {
+    figma.openExternal(msg.url);
   } else if (msg.type === 'generate') {
     try {
       const payload = JSON.parse(msg.payload);

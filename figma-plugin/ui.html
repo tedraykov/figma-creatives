@@ -10,12 +10,19 @@
   button:disabled { opacity: .5; cursor: default; }
   .item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--figma-color-border, #ddd); border-radius: 6px; margin-bottom: 6px; }
   .item small, .muted { color: var(--figma-color-text-secondary, #777); }
+  .forms { display: flex; gap: 6px; } .forms button { flex: 1; }
   details { margin-top: 10px; }
   summary { cursor: pointer; font-weight: 600; }
   #log { height: 150px; overflow: auto; border-top: 1px solid var(--figma-color-border, #ddd); padding-top: 6px; margin-top: 10px; }
   #log div { padding: 1px 0; }
   .warn { color: #b26a00; } .error { color: #d32f2f; } .ok { color: #1b873f; font-weight: 600; }
 </style>
+
+<h3>n8n forms</h3>
+<div class="forms">
+  <button id="openQueue" title="Pick a campaign and templates in the sheet and queue it here">1 · Queue a campaign ↗</button>
+  <button id="openExport" title="Paste the link to the generated campaign page into the form">2 · Export to Drive ↗</button>
+</div>
 
 <h3>Pending campaigns <button class="ghost" id="refresh">Refresh</button></h3>
 <div id="inbox" class="muted">Loading…</div>
@@ -26,6 +33,9 @@
   <p class="muted">The Creatives service and an API key from its Settings.</p>
   <input type="text" id="baseUrl" placeholder="https://creatives.tedraykov.me">
   <input type="password" id="apiKey" placeholder="API key (fr_…)">
+  <p class="muted">The production URLs of the two n8n forms (open the form trigger node and copy its Production URL).</p>
+  <input type="text" id="queueFormUrl" placeholder="Queue campaign form URL">
+  <input type="text" id="exportFormUrl" placeholder="Export to Drive form URL">
   <button id="save">Save and refresh</button>
 </details>
 
@@ -38,7 +48,7 @@
 <div id="log"></div>
 <script>
   const $ = (id) => document.getElementById(id);
-  let settings = { baseUrl: '', apiKey: '' };
+  let settings = { baseUrl: '', apiKey: '', queueFormUrl: '', exportFormUrl: '' };
   let busy = false;
 
   const log = (text, level = '') => { const d = document.createElement('div'); d.className = level; d.textContent = text; $('log').appendChild(d); $('log').scrollTop = $('log').scrollHeight; };
@@ -85,9 +95,16 @@
     } catch (e) { busy = false; log(e.message, 'error'); }
   }
 
+  const openForm = (key) => {
+    if (!settings[key]) { log('Add the form URL under Connection first.', 'warn'); $('settings').open = true; return; }
+    send({ type: 'openForm', url: settings[key] });
+  };
+  $('openQueue').onclick = () => openForm('queueFormUrl');
+  $('openExport').onclick = () => openForm('exportFormUrl');
+
   $('refresh').onclick = refresh;
   $('save').onclick = () => {
-    settings = { baseUrl: $('baseUrl').value.trim(), apiKey: $('apiKey').value.trim() };
+    settings = { baseUrl: $('baseUrl').value.trim(), apiKey: $('apiKey').value.trim(), queueFormUrl: $('queueFormUrl').value.trim(), exportFormUrl: $('exportFormUrl').value.trim() };
     send({ type: 'saveSettings', settings });
     refresh();
   };
@@ -100,7 +117,9 @@
   onmessage = async (e) => {
     const m = e.data.pluginMessage;
     if (m.type === 'settings') {
-      settings = m.settings; $('baseUrl').value = settings.baseUrl; $('apiKey').value = settings.apiKey; refresh();
+      settings = m.settings;
+      for (const k of ['baseUrl', 'apiKey', 'queueFormUrl', 'exportFormUrl']) $(k).value = settings[k] ?? '';
+      refresh();
     } else if (m.type === 'log') {
       log(m.text, m.level === 'info' ? '' : m.level);
     } else if (m.type === 'done') {

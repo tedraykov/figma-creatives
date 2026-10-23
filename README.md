@@ -45,7 +45,7 @@ Adding an integration means implementing the interface documented in `src/integr
 Two kinds of caller, two mechanisms:
 
 - **People (the web UI)** sign in through any OpenID Connect provider. Auth0's free plan (25,000 monthly users, social logins included) works well, as do Google, Okta or Clerk. Restrict sign-ups at the provider (invitation-only, or an allowlist) so strangers can't create accounts; optionally set `ALLOWED_EMAILS` as a second lock.
-- **Machines (n8n)** use API keys generated in **Settings → API keys**. Create one per client, name it, and copy it when shown (it can't be shown again). Keys only grant `/templates`, `/render`, `/campaigns` and `/cache/clear`, never settings. In n8n, use a Header Auth credential: `Authorization: Bearer <key>`.
+- **Machines (n8n)** use API keys generated in **Settings → API keys**. Create one per client, name it, and copy it when shown (it can't be shown again). Keys only grant `/templates`, `/render`, `/campaigns` and `/cache/clear`, never settings. In n8n, use a Bearer Auth credential with the key as the token.
 
 Environment:
 
@@ -119,9 +119,9 @@ Errors come back as JSON: `401` bad key, `404` unknown template or ratio, `422` 
 
 `n8n-workflow.json` holds both flows on one canvas, each with its own form: **Creatives from Google Sheets** (top) and **Export to Drive** (bottom, see below). Import it once, then:
 
-1. Open the **Settings (sheet)** node and set `sheetUrl` (the tab comes from the `#gid=` in the URL; a URL without it reads the first tab) and, optionally, `projectName` (the Creatives project to build in; empty means the default project). The form no longer asks for them.
+1. Open the **Settings (sheet)** node and set `sheetUrl` (the tab comes from the `#gid=` in the URL; a URL without it reads the first tab) and, optionally, `figmaProjectName` (the Creatives project to build in; empty means the default project). The form no longer asks for them.
 2. In **Read sheet**, connect your Google account (a Google Sheets credential).
-3. In **Queue campaign**, **Get projects** and **Get templates**, use a Header Auth credential: name `Authorization`, value `Bearer <key>`, with a key created in **Settings → API keys**.
+3. In **Queue campaign**, **Get projects** and **Get templates**, use a Bearer Auth credential with a key created in **Settings → API keys**.
 
 **One Google Sheet holds many campaigns (for example a month), one block per campaign.** Row 1 is a header with `field` and one column per language, defined once for the whole sheet. Freeze it (View → Freeze → 1 row) and the languages stay visible wherever you scroll. Each block below has a title row with the campaign name (column A) and date (column B), then one row per field. A blank row separates blocks. See `example-campaigns-sheet-blocks.xlsx`.
 
@@ -143,7 +143,7 @@ Errors come back as JSON: `401` bad key, `404` unknown template or ratio, `422` 
 - Keep the blank row between blocks, write `field` in cell A1, and don't merge cells. The workflow stops with an error that names the row if a block is malformed.
 - The sheet holds content only. The **project** comes from the Settings node, and the **templates** and **aspect ratios** are chosen in the form each time you run it. The lists come live from Creatives (`GET /projects`, then `GET /templates?projectId=…`), so new templates and ratios appear without editing the workflow.
 
-Running the form takes three short steps: an optional language list (for example `en, de`), then the campaign (listed from the sheet), then one or more `template/ratio` choices. The flow does not render anything. It queues the campaign (`POST /campaigns`), and the Figma plugin builds it into a page.
+Running the form takes three short steps: submitting the empty first form, then the campaign (listed from the sheet), then one or more `template/ratio` choices. The flow does not render anything. It queues the campaign (`POST /campaigns`), and the Figma plugin builds it into a page.
 
 - **Date:** each campaign's title row needs a date in column B. Day-first (`12.10.2026`) and `2026-10-12` both work. The flow stops with an error if it can't read it, because the Drive folders are named from it.
 - **Emphasis:** wrap part of a text cell in double asterisks (`Shop **now**`). The plugin styles that part like the template layer's own emphasised text (for example the "LOVED" in another font), or the Bold weight of its font if the layer has none.
@@ -152,9 +152,9 @@ Running the form takes three short steps: an optional language list (for example
 
 `figma-plugin/` is a development plugin (Figma desktop app → Plugins → Development → Import plugin from manifest → `figma-plugin/manifest.json`). It cannot be triggered from n8n, since Figma only runs plugins inside the app, so it works as an inbox:
 
-1. Run the n8n form. The campaign is queued on the service.
-2. Open the plugin in the file that holds the templates. Under **Connection**, enter the service URL and an API key once. It lists the pending campaigns.
-3. **Generate** creates a page `<date> <campaign>` with one section per language. Each section has a clone of every chosen `template/ratio` frame, named `template/ratio/language`, with the `#fields` filled. Review and adjust it by hand, then export.
+1. Run the n8n form. The campaign is queued on the service. The plugin's **1 · Queue a campaign** button opens that form in your browser.
+2. Open the plugin in the file that holds the templates. Under **Connection**, enter the service URL, an API key and the production URLs of the two n8n forms (copy them from the form trigger nodes) once. It lists the pending campaigns.
+3. **Generate** creates a page `<date> <campaign>` with one section per language. Each section has a clone of every chosen `template/ratio` frame, named `template/ratio/language`, with the `#fields` filled. Review and adjust it by hand, then click **2 · Export to Drive** to open the export form in your browser, and paste the link to the generated page into it (right-click the page in Figma's Pages list → Copy link).
 
 - A text value replaces the layer's text, `""` (a `-` in the sheet) hides it, and a missing key keeps the design. An image URL becomes the layer's image fill.
 - Templates are found by name (`template/ratio`) in the open file. Fonts must be installed or shared in the Figma organisation. Tick the Inter fallback to test layout without them.
@@ -169,10 +169,10 @@ The second flow in `n8n-workflow.json` is the second half. Review and adjust the
 ```
 
 - The campaign folder comes from the page name, `DD.MM.YYYY Campaign`, which the plugin sets from the sheet. Renaming the page changes the folder, but keep that format.
-- There is one format folder per `ratio` (`Desktop`, `Mobile`, as named in Figma). Files are `DDMM-CC-LANG.jpg` (`CC` is literal, `LANG` is the language from the frame name in capitals). A campaign page is expected to use one template; if two frames would produce the same file in the same folder, the flow stops with an error.
+- There is one format folder per `ratio` (`Desktop`, `Mobile`, as named in Figma). Files are `DDMM-CC-LANG.jpg` for the formats listed in the `noSuffixFormats` setting (default `Desktop`) and `DDMM-CC-LANG-Format.jpg` for the rest, for example `1210-CC-EN-Mobile.jpg` (`CC` is literal, `LANG` is the language from the frame name in capitals). A campaign page is expected to use one template; if two frames would produce the same file in the same folder, the flow stops with an error.
 - Hide a frame to leave it out of the export. Frames named anything else are ignored.
 - **Root folder:** set `driveRootFolderUrl` in the **Settings** node of the export flow. It is not asked in the form. Year, month and campaign folders are reused if they exist and created if not.
-- Credentials: a Header Auth credential `X-Figma-Token` for the two Figma nodes, and a Google Drive OAuth2 credential for the Drive nodes (the `Find …` and `Ensure …` HTTP nodes use it as a predefined credential). Uploads go to *My Drive*; pick a shared drive in **Upload to Drive** if needed.
+- Credentials: a Header Auth credential `X-Figma-Token` for the two Figma nodes, and a Google Drive OAuth2 credential for the Drive nodes (the `List …` and `Create …` folder nodes). Uploads go to *My Drive*; pick a shared drive in **Upload to Drive** if needed.
 - Exporting again uploads new files next to the old ones (Drive allows duplicate names). Figma renders text with fonts available to it, so check one export to confirm Cera PRO appears.
 
 ## Test
