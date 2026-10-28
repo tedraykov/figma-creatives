@@ -111,9 +111,16 @@ async function setText(node, value, fallback) {
   }
 }
 
-const images = new Map(); // url -> Promise<Image>
+const images = new Map(); // url or "asset:<key>" -> Promise<Image>
+let assets = {}; // key -> image data URL, sent with the campaign for private images
 function loadImage(url) {
-  if (!images.has(url)) images.set(url, figma.createImageAsync(url));
+  if (!images.has(url)) {
+    if (url.startsWith('asset:')) {
+      const data = assets[url.slice(6)];
+      if (!data) throw new Error(`the campaign has no image "${url}"`);
+      images.set(url, Promise.resolve(figma.createImage(figma.base64Decode(data.slice(data.indexOf(',') + 1)))));
+    } else images.set(url, figma.createImageAsync(url));
+  }
   return images.get(url);
 }
 
@@ -151,6 +158,8 @@ async function generate(payload, fallback) {
   const jobs = Array.isArray(payload) ? payload : payload.jobs;
   if (!Array.isArray(jobs) || !jobs.length) throw new Error('The payload has no jobs.');
   const head = Array.isArray(payload) ? {} : payload;
+  assets = head.assets || {};
+  images.clear();
   const campaign = head.campaign || 'campaign';
   // "2026-10-12" -> "12.10.2026". The export flow reads the date and name back from this page name,
   // and it becomes the campaign's Drive folder, so keep the format.

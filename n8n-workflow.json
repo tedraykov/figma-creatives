@@ -75,7 +75,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// One Google Sheet holds a month of campaigns. Row 1 is the header (the Read sheet node turns it\n// into the keys) and is frozen, so the languages are defined once for the whole sheet. Then one\n// block per campaign, separated by a blank row:\n//   field      | en | de | ...      header row (row 1): one column per language\n//   <campaign> | <date>             title row\n//   headline   | ...               one row per field\n// Campaigns can use different fields. A campaign renders only the languages that have at least one\n// cell filled in. Cells are kept as typed; the empty / \"-\" rules are applied when the jobs are built.\nconst url = $('Settings (sheet)').first().json.sheetUrl;\nconst spreadsheetId = url.match(/\\/d\\/([a-zA-Z0-9_-]+)/)?.[1];\nif (!spreadsheetId) throw new Error('The sheetUrl in the Settings node is not a Google Sheets link.');\n\nconst rows = $input.all().map((i) => i.json);\nconst slug = (s) => String(s ?? '').trim().replace(/\\s+/g, '-').toLowerCase();\nconst keys = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter((k) => k !== 'row_number' && k.trim());\nconst fieldKey = keys[0];\nif (String(fieldKey ?? '').trim().toLowerCase() !== 'field') throw new Error(`Cell A1 must be \"field\" (the header row holds \"field\" and the languages), found \"${fieldKey ?? ''}\".`);\nconst cols = []; // [language code, column key]\nfor (const key of keys.slice(1)) {\n  const code = slug(key);\n  if (cols.some(([l]) => l === code)) throw new Error(`The language \"${code}\" appears twice in the header row.`);\n  cols.push([code, key]);\n}\nif (!cols.length) throw new Error('No languages in the header row.');\n\nconst val = (row, key) => String(row[key] ?? '').trim();\n// The Read sheet node may drop blank rows, so a title row is also recognised by its date.\nconst DATE = /^\\d{4}[-./]\\d{1,2}[-./]\\d{1,2}$|^\\d{1,2}[-./]\\d{1,2}[-./]\\d{2,4}$/;\nconst looksLikeTitle = (row) => DATE.test(val(row, cols[0][1])) && cols.slice(1).every(([, key]) => val(row, key) === '');\n\nconst campaigns = [];\nlet cur = null;\nlet prev = null;\nrows.forEach((row, i) => {\n  const num = Number(row.row_number) || i + 2;\n  const blank = !val(row, fieldKey) && cols.every(([, key]) => val(row, key) === '');\n  if (blank || (prev !== null && num - prev > 1)) cur = null; // blank row (or a gap in row numbers) ends a block\n  prev = num;\n  if (blank) return;\n  const at = `Row ${num}`;\n  if (!cur || looksLikeTitle(row)) { // title row\n    if (!val(row, fieldKey)) throw new Error(`${at}: expected the campaign name in column A.`);\n    cur = { name: val(row, fieldKey), date: val(row, cols[0][1]), fields: {} };\n    cur.label = cur.date ? `${cur.name} (${cur.date})` : cur.name;\n    if (campaigns.some((c) => c.label === cur.label)) throw new Error(`${at}: the campaign \"${cur.label}\" appears twice.`);\n    campaigns.push(cur);\n    return;\n  }\n  const field = val(row, fieldKey).toLowerCase(); // field row\n  if (!field) throw new Error(`${at}: a row under \"${cur.name}\" has values but no field name in column A.`);\n  if (cur.fields[field]) throw new Error(`${at}: the field \"${field}\" appears twice under \"${cur.name}\".`);\n  cur.fields[field] = Object.fromEntries(cols.map(([code, key]) => [code, val(row, key)]));\n});\nfor (const c of campaigns) {\n  if (!Object.keys(c.fields).length) throw new Error(`The campaign \"${c.name}\" has no field rows.`);\n  c.languages = cols.map(([code]) => code).filter((code) => Object.values(c.fields).some((v) => v[code] !== ''));\n}\nif (!campaigns.length) throw new Error('No campaigns found in the sheet. Each block starts with the campaign name in column A and the date in column B, under the header row.');\nreturn [{ json: { spreadsheetId, campaigns } }];"
+        "jsCode": "// One Google Sheet holds a month of campaigns. Row 1 is the header (the Read sheet node turns it\n// into the keys) and is frozen, so the languages are defined once for the whole sheet. Then one\n// block per campaign, separated by a blank row:\n//   field      | en | de | ...      header row (row 1): one column per language\n//   <campaign> | <date> | <template> title row: the date sits in the first language column, the template in the second\n//   headline   | ...               one row per field\n// Campaigns can use different fields. A campaign renders only the languages that have at least one\n// cell filled in. Cells are kept as typed; the empty / \"-\" rules are applied when the jobs are built.\nconst url = $('Settings (sheet)').first().json.sheetUrl;\nconst spreadsheetId = url.match(/\\/d\\/([a-zA-Z0-9_-]+)/)?.[1];\nif (!spreadsheetId) throw new Error('The sheetUrl in the Settings node is not a Google Sheets link.');\n\nconst rows = $input.all().map((i) => i.json);\nconst slug = (s) => String(s ?? '').trim().replace(/\\s+/g, '-').toLowerCase();\nconst keys = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter((k) => k !== 'row_number' && k.trim());\nconst fieldKey = keys[0];\nif (String(fieldKey ?? '').trim().toLowerCase() !== 'field') throw new Error(`Cell A1 must be \"field\" (the header row holds \"field\" and the languages), found \"${fieldKey ?? ''}\".`);\nconst cols = []; // [language code, column key]\nfor (const key of keys.slice(1)) {\n  const code = slug(key);\n  if (cols.some(([l]) => l === code)) throw new Error(`The language \"${code}\" appears twice in the header row.`);\n  cols.push([code, key]);\n}\nif (cols.length < 2) throw new Error('The header row needs at least two language columns: the title row keeps the date in the first and the template in the second.');\n\nconst val = (row, key) => String(row[key] ?? '').trim();\n// The Read sheet node may drop blank rows, so a title row is also recognised by its date.\nconst DATE = /^\\d{4}[-./]\\d{1,2}[-./]\\d{1,2}$|^\\d{1,2}[-./]\\d{1,2}[-./]\\d{2,4}$/;\nconst looksLikeTitle = (row) => DATE.test(val(row, cols[0][1])) && cols.slice(2).every(([, key]) => val(row, key) === '');\n\nconst campaigns = [];\nlet cur = null;\nlet prev = null;\nrows.forEach((row, i) => {\n  const num = Number(row.row_number) || i + 2;\n  const blank = !val(row, fieldKey) && cols.every(([, key]) => val(row, key) === '');\n  if (blank || (prev !== null && num - prev > 1)) cur = null; // blank row (or a gap in row numbers) ends a block\n  prev = num;\n  if (blank) return;\n  const at = `Row ${num}`;\n  if (!cur || looksLikeTitle(row)) { // title row\n    if (!val(row, fieldKey)) throw new Error(`${at}: expected the campaign name in column A.`);\n    cur = { name: val(row, fieldKey), date: val(row, cols[0][1]), template: val(row, cols[1][1]), fields: {} };\n    cur.label = cur.date ? `${cur.name} (${cur.date})` : cur.name;\n    if (campaigns.some((c) => c.label === cur.label)) throw new Error(`${at}: the campaign \"${cur.label}\" appears twice.`);\n    campaigns.push(cur);\n    return;\n  }\n  const field = val(row, fieldKey).toLowerCase(); // field row\n  if (!field) throw new Error(`${at}: a row under \"${cur.name}\" has values but no field name in column A.`);\n  if (cur.fields[field]) throw new Error(`${at}: the field \"${field}\" appears twice under \"${cur.name}\".`);\n  cur.fields[field] = Object.fromEntries(cols.map(([code, key]) => [code, val(row, key)]));\n});\nfor (const c of campaigns) {\n  if (!Object.keys(c.fields).length) throw new Error(`The campaign \"${c.name}\" has no field rows.`);\n  c.languages = cols.map(([code]) => code).filter((code) => Object.values(c.fields).some((v) => v[code] !== ''));\n}\nif (!campaigns.length) throw new Error('No campaigns found in the sheet. Each block starts with the campaign name in column A and the date in column B, under the header row.');\nreturn [{ json: { spreadsheetId, campaigns } }];"
       },
       "id": "b2f0c001-0000-4000-8000-000000000011",
       "name": "Parse sheet",
@@ -89,7 +89,7 @@
     {
       "parameters": {
         "formTitle": "Choose a campaign",
-        "formDescription": "Step 2 of 3. The campaigns found in the sheet, with their dates.",
+        "formDescription": "Step 2 of 2. The campaigns found in the sheet, with their dates.",
         "defineForm": "json",
         "jsonOutput": "={{ JSON.stringify([{ fieldLabel: 'Campaign', fieldType: 'dropdown', requiredField: true, fieldOptions: { values: $json.campaigns.map((c) => ({ option: c.label })) } }]) }}",
         "options": {}
@@ -160,25 +160,7 @@
     },
     {
       "parameters": {
-        "formTitle": "Choose templates",
-        "formDescription": "Step 3 of 3. Every template and aspect ratio in the project (template/ratio). Pick as many as you need.",
-        "defineForm": "json",
-        "jsonOutput": "={{ JSON.stringify([{ fieldLabel: 'Creatives', fieldType: 'dropdown', multiselect: true, requiredField: true, fieldOptions: { values: Object.entries($json.templates).flatMap(([template, ratios]) => Object.keys(ratios).map((ratio) => ({ option: template + '/' + ratio }))) } }]) }}",
-        "options": {}
-      },
-      "id": "b2f0c001-0000-4000-8000-000000000009",
-      "name": "Choose creatives",
-      "type": "n8n-nodes-base.form",
-      "typeVersion": 2.5,
-      "position": [
-        2992,
-        432
-      ],
-      "webhookId": "figma-renderer-creatives"
-    },
-    {
-      "parameters": {
-        "jsCode": "// A campaign is one block of the sheet (see Parse sheet): rows are fields, columns are languages.\n// The output is one payload for the Figma plugin, which builds a page with a frame per language and template/ratio.\n// Text may mark emphasis with **double asterisks**; the plugin styles that part.\n// A cell left empty is not sent, so the design keeps its default for that layer.\n// A cell containing only \"-\" hides the layer (the renderer treats \"\" as hidden).\n// A cell holding a Google Drive file link (images such as the background) is turned into a direct download URL.\nconst { spreadsheetId, campaigns } = $('Parse sheet').first().json;\nconst label = $('Choose campaign').first().json.Campaign;\nconst campaign = campaigns.find((c) => c.label === label);\nif (!campaign) throw new Error(`Campaign \"${label}\" is no longer in the sheet.`);\nconst date = isoDate(campaign.date);\nif (!date) throw new Error(`The campaign \"${campaign.name}\" needs a date in column B of its title row (for example 12.10.2026), found \"${campaign.date ?? ''}\".`);\nconst projects = $('Get projects').first().json.projects;\nconst projectName = $('Pick project').first().json.Project;\nconst projectId = projects.find((p) => p.name === projectName)?.id;\nif (!projectId) throw new Error(`Project \"${projectName}\" is no longer in Creatives.`);\nconst picked = $('Choose creatives').first().json.Creatives;\nconst creatives = (Array.isArray(picked) ? picked : [picked]).map((v) => {\n  const i = String(v).lastIndexOf('/');\n  return { template: v.slice(0, i), ratio: v.slice(i + 1) };\n});\n\n// The date names the Drive folders in the export flow (year / month / campaign), so it must be readable.\n// Day first for 12.10.2026 style dates; also accepts 2026-10-12 and a raw sheet serial number.\nfunction isoDate(text) {\n  const t = String(text ?? '').trim();\n  let y, m, d;\n  let hit;\n  if ((hit = t.match(/^(\\d{4})[-./](\\d{1,2})[-./](\\d{1,2})$/))) [y, m, d] = hit.slice(1).map(Number);\n  else if ((hit = t.match(/^(\\d{1,2})[-./](\\d{1,2})[-./](\\d{2,4})$/))) { [d, m, y] = hit.slice(1).map(Number); if (y < 100) y += 2000; }\n  else if (/^\\d{5}$/.test(t)) { const x = new Date(Date.UTC(1899, 11, 30) + Number(t) * 86400000); [y, m, d] = [x.getUTCFullYear(), x.getUTCMonth() + 1, x.getUTCDate()]; }\n  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;\n  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;\n}\n// drive.google.com/file/d/ID/view, drive.google.com/open?id=ID and drive.google.com/uc?id=ID become a direct download.\n// The file must be shared as \"Anyone with the link\". Folder links and other URLs are left alone.\nfunction driveImage(text) {\n  const t = String(text);\n  if (!/^https?:\\/\\/(drive|docs)\\.google\\.com\\//.test(t)) return t;\n  const id = t.match(/\\/file\\/d\\/([A-Za-z0-9_-]+)/)?.[1] ?? t.match(/[?&]id=([A-Za-z0-9_-]+)/)?.[1];\n  return id ? `https://drive.usercontent.google.com/download?id=${id}&export=download` : t;\n}\nconst languages = campaign.languages;\nif (!languages.length) throw new Error(`\"${campaign.name}\" has no language with a filled-in cell.`);\n\nconst jobs = [];\nfor (const language of languages) {\n  const data = {};\n  for (const [field, values] of Object.entries(campaign.fields)) {\n    const value = String(values[language] ?? '').trim();\n    if (value === '-') data[field] = '';\n    else if (value !== '') data[field] = driveImage(value);\n  }\n  for (const { template, ratio } of creatives) {\n    jobs.push({\n      template, ratio, language, data,\n    });\n  }\n}\n// Resolved like the renderer: a missing key keeps the design, \"\" hides the layer.\nreturn [{ json: { campaign: campaign.name, date, jobs } }];\n"
+        "jsCode": "// A campaign is one block of the sheet (see Parse sheet): rows are fields, columns are languages.\n// The output is one payload for the Figma plugin, which builds a page with a frame per language and template/ratio.\n// Text may mark emphasis with **double asterisks**; the plugin styles that part.\n// A cell left empty is not sent, so the design keeps its default for that layer.\n// A cell containing only \"-\" hides the layer (the renderer treats \"\" as hidden).\n// A cell holding a Google Drive file link (images such as the background) becomes \"asset:<file id>\". The next steps\n// download those files with the Drive credential and embed them in the payload, so the files can stay private.\nconst { spreadsheetId, campaigns } = $('Parse sheet').first().json;\nconst label = $('Choose campaign').first().json.Campaign;\nconst campaign = campaigns.find((c) => c.label === label);\nif (!campaign) throw new Error(`Campaign \"${label}\" is no longer in the sheet.`);\nconst date = isoDate(campaign.date);\nif (!date) throw new Error(`The campaign \"${campaign.name}\" needs a date in column B of its title row (for example 12.10.2026), found \"${campaign.date ?? ''}\".`);\nconst projects = $('Get projects').first().json.projects;\nconst projectName = $('Pick project').first().json.Project;\nconst projectId = projects.find((p) => p.name === projectName)?.id;\nif (!projectId) throw new Error(`Project \"${projectName}\" is no longer in Creatives.`);\n// The template comes from the title row of the sheet; the ratios are all the ones the template has in Creatives.\nif (!campaign.template) throw new Error(`The campaign \"${campaign.name}\" needs a template in column C of its title row.`);\nconst templates = $('Get templates').first().json.templates;\nconst template = Object.keys(templates).find((t) => t.toLowerCase() === campaign.template.toLowerCase());\nif (!template) throw new Error(`The template \"${campaign.template}\" of \"${campaign.name}\" is not in the project. Use one of: ${Object.keys(templates).join(', ')}.`);\nconst creatives = Object.keys(templates[template]).map((ratio) => ({ template, ratio }));\n\n// The date names the Drive folders in the export flow (year / month / campaign), so it must be readable.\n// Day first for 12.10.2026 style dates; also accepts 2026-10-12 and a raw sheet serial number.\nfunction isoDate(text) {\n  const t = String(text ?? '').trim();\n  let y, m, d;\n  let hit;\n  if ((hit = t.match(/^(\\d{4})[-./](\\d{1,2})[-./](\\d{1,2})$/))) [y, m, d] = hit.slice(1).map(Number);\n  else if ((hit = t.match(/^(\\d{1,2})[-./](\\d{1,2})[-./](\\d{2,4})$/))) { [d, m, y] = hit.slice(1).map(Number); if (y < 100) y += 2000; }\n  else if (/^\\d{5}$/.test(t)) { const x = new Date(Date.UTC(1899, 11, 30) + Number(t) * 86400000); [y, m, d] = [x.getUTCFullYear(), x.getUTCMonth() + 1, x.getUTCDate()]; }\n  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;\n  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;\n}\n// drive.google.com/file/d/ID/view, drive.google.com/open?id=ID and drive.google.com/uc?id=ID become \"asset:ID\".\n// Folder links and other URLs are left alone.\nconst driveIds = new Set();\nfunction driveImage(text) {\n  const t = String(text);\n  if (!/^https?:\\/\\/(drive|docs)\\.google\\.com\\//.test(t)) return t;\n  const id = t.match(/\\/file\\/d\\/([A-Za-z0-9_-]+)/)?.[1] ?? t.match(/[?&]id=([A-Za-z0-9_-]+)/)?.[1];\n  if (!id) return t;\n  driveIds.add(id);\n  return `asset:${id}`;\n}\nconst languages = campaign.languages;\nif (!languages.length) throw new Error(`\"${campaign.name}\" has no language with a filled-in cell.`);\n\n// A field row named \"<field>@<ratio>\" (for example \"background@mobile\") overrides \"<field>\" for that ratio only.\n// Where the override cell is empty, the plain \"<field>\" cell is used.\nconst cell = (field, language) => String(campaign.fields[field]?.[language] ?? '').trim();\nconst names = [...new Set(Object.keys(campaign.fields).map((f) => f.split('@')[0].trim()))];\nconst jobs = [];\nfor (const language of languages) {\n  for (const { template, ratio } of creatives) {\n    const data = {};\n    for (const field of names) {\n      const value = cell(`${field}@${ratio.toLowerCase()}`, language) || cell(field, language);\n      if (value === '-') data[field] = '';\n      else if (value !== '') data[field] = driveImage(value);\n    }\n    jobs.push({\n      template, ratio, language, data,\n    });\n  }\n}\n// Resolved like the renderer: a missing key keeps the design, \"\" hides the layer.\nreturn [{ json: { campaign: campaign.name, date, jobs, driveIds: [...driveIds] } }];\n"
       },
       "id": "b2f0c001-0000-4000-8000-000000000002",
       "name": "Build campaign",
@@ -205,7 +187,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        3472,
+        4432,
         432
       ]
     },
@@ -221,7 +203,7 @@
       "type": "n8n-nodes-base.form",
       "typeVersion": 2.5,
       "position": [
-        3712,
+        4672,
         432
       ],
       "webhookId": "figma-renderer-queued"
@@ -275,13 +257,13 @@
     },
     {
       "parameters": {
-        "content": "### 3. Pick templates\nFetch the project's templates and choose which to build.",
+        "content": "### 3. Get templates\nFetch the project's templates. The campaign's template (from the sheet) must be one of them; its ratios are all built.",
         "height": 400,
         "width": 440,
         "color": 5
       },
       "id": "b2f0c001-0000-4000-8000-000000000102",
-      "name": "Group: 3. Pick templates",
+      "name": "Group: 3. Get templates",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
@@ -291,9 +273,9 @@
     },
     {
       "parameters": {
-        "content": "### 4. Queue\nBuilds the plugin payload from the sheet, queues it for the Figma plugin, confirms.",
+        "content": "### 4. Queue\nBuilds the plugin payload from the sheet, downloads any Google Drive images with the Drive credential and embeds them, queues it for the Figma plugin, confirms.",
         "height": 400,
-        "width": 680,
+        "width": 1680,
         "color": 3
       },
       "id": "b2f0c001-0000-4000-8000-000000000103",
@@ -357,8 +339,8 @@
             },
             {
               "id": "b2f0c002-0000-4000-8000-000000000031",
-              "name": "noSuffixFormats",
-              "value": "Desktop",
+              "name": "formatFileNames",
+              "value": "{\"Desktop\": \"\", \"Mobile\": \"mob\"}",
               "type": "string"
             }
           ]
@@ -377,7 +359,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Reads the page link from the form and the Drive root from the Settings node.\nconst form = $input.first().json;\nconst link = String(form['Figma page URL'] ?? '').trim();\nconst file = link.match(/figma\\.com\\/(?:design|file)\\/([A-Za-z0-9]+)/);\nif (!file) throw new Error('The Figma page URL is not a figma.com/design link.');\n// Regex instead of new URL(): URL is not reliably available in the Code node sandbox.\nconst node = (link.match(/[?&]node-id=([^&#]+)/)?.[1] ?? '').replace(/%3A/i, ':').replace('-', ':');\nif (!node) throw new Error('The link has no node-id. In Figma, right-click the campaign page in the Pages list and choose Copy link.');\n\nconst root = String(form.driveRootFolderUrl ?? '').trim();\nconst rootId = root.match(/folders\\/([A-Za-z0-9_-]+)/)?.[1] ?? (/^[A-Za-z0-9_-]{15,}$/.test(root) ? root : null);\nif (!rootId || root.includes('REPLACE_WITH')) throw new Error('Set the Drive root folder URL in the Settings node (a drive.google.com/drive/folders/… link).');\n\n// Formats listed here (comma separated, any case) keep the plain file name; every other format gets \"-<format>\" added.\nconst noSuffix = String(form.noSuffixFormats ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);\n\nreturn [{ json: { fileKey: file[1], nodeId: node, rootId, scale: parseInt(form.Scale, 10) || 1, noSuffix } }];\n"
+        "jsCode": "// Reads the page link from the form and the Drive root from the Settings node.\nconst form = $input.first().json;\nconst link = String(form['Figma page URL'] ?? '').trim();\nconst file = link.match(/figma\\.com\\/(?:design|file)\\/([A-Za-z0-9]+)/);\nif (!file) throw new Error('The Figma page URL is not a figma.com/design link.');\n// Regex instead of new URL(): URL is not reliably available in the Code node sandbox.\nconst node = (link.match(/[?&]node-id=([^&#]+)/)?.[1] ?? '').replace(/%3A/i, ':').replace('-', ':');\nif (!node) throw new Error('The link has no node-id. In Figma, right-click the campaign page in the Pages list and choose Copy link.');\n\nconst root = String(form.driveRootFolderUrl ?? '').trim();\nconst rootId = root.match(/folders\\/([A-Za-z0-9_-]+)/)?.[1] ?? (/^[A-Za-z0-9_-]{15,}$/.test(root) ? root : null);\nif (!rootId || root.includes('REPLACE_WITH')) throw new Error('Set the Drive root folder URL in the Settings node (a drive.google.com/drive/folders/… link).');\n\n// Map of format name (the folder name) to the part it contributes to the file name: {\"Mobile\": \"mob\", \"Desktop\": \"\"}.\n// An empty value drops the part. A format missing from the map uses its full name.\nlet fileNames;\ntry { fileNames = JSON.parse(form.formatFileNames); } catch { throw new Error('formatFileNames in the Settings node is not valid JSON, like {\"Desktop\": \"\", \"Mobile\": \"mob\"}.'); }\nconst formatNames = Object.fromEntries(Object.entries(fileNames).map(([k, v]) => [k.trim().toLowerCase(), String(v).trim()]));\n\nreturn [{ json: { fileKey: file[1], nodeId: node, rootId, scale: parseInt(form.Scale, 10) || 1, formatNames } }];\n"
       },
       "id": "b2f0c002-0000-4000-8000-000000000002",
       "name": "Parse form",
@@ -406,7 +388,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// The page name is \"DD.MM.YYYY Campaign title\" (the plugin names it so). Frames are \"template/ratio/language\".\n// Hidden frames are skipped, so hide any you do not want exported.\nconst { fileKey, nodeId, rootId, scale, noSuffix } = $('Parse form').first().json;\nconst page = $input.first().json.nodes?.[nodeId]?.document;\nif (!page) throw new Error('Figma did not return that page. Check the link and that the token can read the file.');\nif (page.type !== 'CANVAS') throw new Error(`That link points to a ${page.type.toLowerCase()}, not a page. Right-click the campaign page in the Pages list and choose Copy link.`);\n\nconst head = page.name.match(/^(\\d{2})\\.(\\d{2})\\.(\\d{4})\\s+(.+)$/);\nif (!head) throw new Error(`The page is named \"${page.name}\". It must start with the campaign date, like \"12.10.2026 Autumn Sale\".`);\nconst [, dd, mm, yyyy, title] = head;\nconst MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];\nif (Number(mm) < 1 || Number(mm) > 12) throw new Error(`\"${page.name}\" has no valid month.`);\n\nconst NAME = /^([^/]+)\\/([^/]+)\\/([^/]+)$/;\nconst frames = [];\nconst walk = (n) => {\n  for (const c of n.children ?? []) {\n    if (c.visible === false) continue;\n    if (c.type === 'SECTION') walk(c);\n    else if (c.type === 'FRAME') {\n      const m = c.name.match(NAME);\n      if (m) frames.push({ id: c.id, template: m[1].trim(), ratio: m[2].trim(), language: m[3].trim() });\n    }\n  }\n};\nwalk(page);\nif (!frames.length) throw new Error(`No frames named template/ratio/language on \"${page.name}\".`);\n\n// One template per campaign, so each format folder holds DDMM-CC-LANG[-Format].jpg once per language.\nconst seen = new Map();\nfor (const f of frames) {\n  const suffix = noSuffix.includes(f.ratio.toLowerCase()) ? '' : `-${f.ratio}`;\n  f.fileName = `${dd}${mm}-CC-${f.language.toUpperCase()}${suffix}.jpg`;\n  const slot = `${f.ratio}/${f.fileName}`;\n  if (seen.has(slot)) throw new Error(`\"${seen.get(slot)}\" and \"${f.template}/${f.ratio}/${f.language}\" would both become ${slot}. A campaign page should use one template; hide or rename one.`);\n  seen.set(slot, `${f.template}/${f.ratio}/${f.language}`);\n}\n\nreturn [{ json: {\n  fileKey, rootId, scale, frames,\n  year: yyyy, month: `${mm}. ${MONTHS[Number(mm) - 1]}`, campaign: `${dd}.${mm}.${yyyy} ${title.trim()}`,\n  ratios: [...new Set(frames.map((f) => f.ratio))],\n} }];\n"
+        "jsCode": "// The page name is \"DD.MM.YYYY Campaign title\" (the plugin names it so). Frames are \"template/ratio/language\".\n// Hidden frames are skipped, so hide any you do not want exported.\nconst { fileKey, nodeId, rootId, scale, formatNames } = $('Parse form').first().json;\nconst page = $input.first().json.nodes?.[nodeId]?.document;\nif (!page) throw new Error('Figma did not return that page. Check the link and that the token can read the file.');\nif (page.type !== 'CANVAS') throw new Error(`That link points to a ${page.type.toLowerCase()}, not a page. Right-click the campaign page in the Pages list and choose Copy link.`);\n\nconst head = page.name.match(/^(\\d{2})\\.(\\d{2})\\.(\\d{4})\\s+(.+)$/);\nif (!head) throw new Error(`The page is named \"${page.name}\". It must start with the campaign date, like \"12.10.2026 Autumn Sale\".`);\nconst [, dd, mm, yyyy, title] = head;\nconst MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];\nif (Number(mm) < 1 || Number(mm) > 12) throw new Error(`\"${page.name}\" has no valid month.`);\n\nconst NAME = /^([^/]+)\\/([^/]+)\\/([^/]+)$/;\nconst frames = [];\nconst walk = (n) => {\n  for (const c of n.children ?? []) {\n    if (c.visible === false) continue;\n    if (c.type === 'SECTION') walk(c);\n    else if (c.type === 'FRAME') {\n      const m = c.name.match(NAME);\n      if (m) frames.push({ id: c.id, template: m[1].trim(), ratio: m[2].trim(), language: m[3].trim() });\n    }\n  }\n};\nwalk(page);\nif (!frames.length) throw new Error(`No frames named template/ratio/language on \"${page.name}\".`);\n\n// One template per campaign, so each format folder holds DDMM[_format]_CC-LANG.jpg once per language.\nconst seen = new Map();\nfor (const f of frames) {\n  const part = formatNames[f.ratio.toLowerCase()] ?? f.ratio;\n  f.fileName = `${dd}${mm}${part ? `_${part}` : ''}_CC-${f.language.toUpperCase()}.jpg`;\n  const slot = `${f.ratio}/${f.fileName}`;\n  if (seen.has(slot)) throw new Error(`\"${seen.get(slot)}\" and \"${f.template}/${f.ratio}/${f.language}\" would both become ${slot}. A campaign page should use one template; hide or rename one.`);\n  seen.set(slot, `${f.template}/${f.ratio}/${f.language}`);\n}\n\nreturn [{ json: {\n  fileKey, rootId, scale, frames,\n  year: yyyy, month: `${mm}. ${MONTHS[Number(mm) - 1]}`, campaign: `${dd}.${mm}.${yyyy} ${title.trim()}`,\n  ratios: [...new Set(frames.map((f) => f.ratio))],\n} }];\n"
       },
       "id": "b2f0c002-0000-4000-8000-000000000004",
       "name": "Plan export",
@@ -1062,7 +1044,7 @@
     },
     {
       "parameters": {
-        "content": "## Export a campaign page to Drive\n1. Credentials: a Header Auth credential for the two **Figma** HTTP nodes (name `X-Figma-Token`, value your Figma token), and a Google Drive OAuth2 credential for every **Drive** node (the `List …` and `Create …` folder nodes, plus **Upload to Drive**).\n2. Drive root folder: open the **Settings** node and change `driveRootFolderUrl` to your folder's link (a `drive.google.com/drive/folders/…` URL). Every export is filed under it, so it is not asked in the form. To use another folder, edit that value and save.\n3. File names: `DDMM-CC-LANG.jpg` for the formats listed in `noSuffixFormats` (Settings node, comma separated, default `Desktop`), and `DDMM-CC-LANG-Format.jpg` for every other format (for example `-Mobile`).\n4. Folders: root / year / `MM. Month` / `DD.MM.YYYY Campaign` / format.\nUploads go to *My Drive*. For a shared drive, pick it in **Upload to Drive**.",
+        "content": "## Export a campaign page to Drive\n1. Credentials: a Header Auth credential for the two **Figma** HTTP nodes (name `X-Figma-Token`, value your Figma token), and a Google Drive OAuth2 credential for every **Drive** node (the `List …` and `Create …` folder nodes, plus **Upload to Drive**).\n2. Drive root folder: open the **Settings** node and change `driveRootFolderUrl` to your folder's link (a `drive.google.com/drive/folders/…` URL). Every export is filed under it, so it is not asked in the form. To use another folder, edit that value and save.\n3. File names: `DDMM_CC-LANG.jpg`, with the format part added as `DDMM_mob_CC-LANG.jpg`. The `formatFileNames` map (Settings node, JSON) says which part each format contributes; folders keep the full format name. An empty value drops the part (Desktop), and a format missing from the map uses its full name.\n4. Folders: root / year / `MM. Month` / `DD.MM.YYYY Campaign` / format.\nUploads go to *My Drive*. For a shared drive, pick it in **Upload to Drive**.",
         "height": 240,
         "width": 520
       },
@@ -1170,6 +1152,280 @@
         4848,
         1056
       ]
+    },
+    {
+      "name": "Daily archive",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        1072,
+        3000
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000100"
+    },
+    {
+      "name": "Settings (archive)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1312,
+        3000
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b2f0c003-0000-4000-8000-000000000030",
+              "name": "sheetUrl",
+              "value": "https://docs.google.com/spreadsheets/d/1b_B9JE7HkeOmvFeHoerCr3NLL28vUL0aDoD0SYMGP2Y/edit?gid=793344349#gid=793344349",
+              "type": "string"
+            },
+            {
+              "id": "b2f0c003-0000-4000-8000-000000000031",
+              "name": "archiveSheetName",
+              "value": "Archive",
+              "type": "string"
+            },
+            {
+              "id": "b2f0c003-0000-4000-8000-000000000032",
+              "name": "archiveAfterDays",
+              "value": 30,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000101"
+    },
+    {
+      "name": "Read sheet (archive)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1552,
+        3000
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $('Settings (archive)').first().json.sheetUrl }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ ($('Settings (archive)').first().json.sheetUrl.match(/gid=(\\d+)/) || [])[1] || '0' }}"
+        },
+        "options": {}
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000102"
+    },
+    {
+      "name": "Find old campaigns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        3000
+      ],
+      "parameters": {
+        "jsCode": "// Finds the campaigns whose date (cell B of the title row) is more than archiveAfterDays days old.\n// Blocks are read like in Parse sheet: a title row (name, date, template) followed by field rows, ended by a blank row.\n// Output: the rows to copy to the archive tab, and the row ranges to delete from the campaigns tab.\nconst { archiveAfterDays } = $('Settings (archive)').first().json;\nconst limit = Number(archiveAfterDays) || 30;\nconst rows = $('Read sheet (archive)').all().map((i) => i.json);\nconst keys = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter((k) => k !== 'row_number' && k.trim());\nconst fieldKey = keys[0];\nif (String(fieldKey ?? '').trim().toLowerCase() !== 'field') throw new Error(`Cell A1 must be \"field\", found \"${fieldKey ?? ''}\".`);\nconst langKeys = keys.slice(1);\nif (langKeys.length < 2) throw new Error('The header row needs at least two language columns.');\n\nconst val = (row, key) => String(row[key] ?? '').trim();\nconst DATE = /^\\d{4}[-./]\\d{1,2}[-./]\\d{1,2}$|^\\d{1,2}[-./]\\d{1,2}[-./]\\d{2,4}$/;\nconst looksLikeTitle = (row) => DATE.test(val(row, langKeys[0])) && langKeys.slice(2).every((k) => val(row, k) === '');\n// Day first for 12.10.2026; also 2026-10-12 and a raw sheet serial number. Returns a UTC day number or null.\nfunction dayOf(text) {\n  const t = String(text ?? '').trim();\n  let y, m, d, hit;\n  if ((hit = t.match(/^(\\d{4})[-./](\\d{1,2})[-./](\\d{1,2})$/))) [y, m, d] = hit.slice(1).map(Number);\n  else if ((hit = t.match(/^(\\d{1,2})[-./](\\d{1,2})[-./](\\d{2,4})$/))) { [d, m, y] = hit.slice(1).map(Number); if (y < 100) y += 2000; }\n  else if (/^\\d{5}$/.test(t)) return Number(t) - 25569;\n  if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;\n  return Date.UTC(y, m - 1, d) / 86400000;\n}\n\nconst blocks = [];\nlet cur = null;\nlet prev = null;\nrows.forEach((row, i) => {\n  const num = Number(row.row_number) || i + 2;\n  const blank = !val(row, fieldKey) && langKeys.every((k) => val(row, k) === '');\n  if (blank || (prev !== null && num - prev > 1)) { if (cur) cur.gapAfter = true; cur = null; } // a blank row follows the block\n  prev = num;\n  if (blank) return;\n  if (!cur || looksLikeTitle(row)) {\n    cur = { name: val(row, fieldKey), day: dayOf(val(row, langKeys[0])), first: num, last: num, rows: [], gapAfter: false };\n    blocks.push(cur);\n  }\n  cur.last = num;\n  cur.rows.push(Object.fromEntries(keys.map((k) => [k, String(row[k] ?? '')])));\n});\n\nconst today = Math.floor(Date.now() / 86400000);\nconst old = blocks.filter((b) => b.day !== null && today - b.day > limit);\nif (!old.length) return [];\n\nconst blankRow = Object.fromEntries(keys.map((k) => [k, '']));\nreturn [{ json: {\n  campaigns: old.map((b) => b.name),\n  rows: old.flatMap((b) => [...b.rows, blankRow]),\n  // The blank row after a block goes too, but only when it is known to be there (the next block starts after a gap).\n  deletes: old.map((b) => ({ name: b.name, startIndex: b.first, count: b.last - b.first + 1 + (b.gapAfter ? 1 : 0) })),\n} }];\n"
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000103"
+    },
+    {
+      "name": "Split rows",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        2032,
+        3000
+      ],
+      "parameters": {
+        "fieldToSplitOut": "rows",
+        "include": "noOtherFields",
+        "options": {}
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000104"
+    },
+    {
+      "name": "Copy to Archive tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2272,
+        3000
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $('Settings (archive)').first().json.sheetUrl }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Settings (archive)').first().json.archiveSheetName }}"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": []
+        },
+        "options": {
+          "handlingExtraData": "ignoreIt"
+        }
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000105"
+    },
+    {
+      "name": "Plan deletes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2512,
+        3000
+      ],
+      "parameters": {
+        "jsCode": "// The row ranges to delete, bottom first so earlier row numbers stay valid while rows are removed.\nconst { deletes } = $('Find old campaigns').first().json;\nreturn [...deletes].sort((a, b) => b.startIndex - a.startIndex).map((d) => ({ json: d }));\n"
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000106"
+    },
+    {
+      "name": "Delete archived rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2752,
+        3000
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "={{ $('Settings (archive)').first().json.sheetUrl }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ ($('Settings (archive)').first().json.sheetUrl.match(/gid=(\\d+)/) || [])[1] || '0' }}"
+        },
+        "toDelete": "rows",
+        "startIndex": "={{ $json.startIndex }}",
+        "numberToDelete": "={{ $json.count }}"
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000107"
+    },
+    {
+      "name": "Setup (archive)",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        2700
+      ],
+      "parameters": {
+        "content": "## Archive old campaigns\nRuns daily at 03:00. Campaigns whose date (cell B of the title row) is more than `archiveAfterDays` days old are copied to the `archiveSheetName` tab, then their rows are deleted from the campaigns tab.\n1. Create the tab named in **Settings (archive)** (default `Archive`) and copy row 1 of the campaigns tab into it. Rows are matched to it by header.\n2. Set `sheetUrl` in **Settings (archive)** to the campaigns sheet, as in **Settings (sheet)**.\n3. Credentials: Google Sheets OAuth2 on the three Google Sheets nodes here.\nA campaign with an unreadable date is left alone. Rows are copied before anything is deleted, so a failed copy deletes nothing.",
+        "height": 260,
+        "width": 560
+      },
+      "id": "b2f0c003-0000-4000-8000-000000000108"
+    },
+    {
+      "id": "b2f0c001-0000-4000-8000-000000000101",
+      "name": "Has Drive images?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3472,
+        432
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b2f0c001-0000-4000-8000-000000000111",
+              "leftValue": "={{ $json.driveIds.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b2f0c001-0000-4000-8000-000000000102",
+      "name": "Drive files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3712,
+        336
+      ],
+      "parameters": {
+        "jsCode": "// One item per Drive file used by the campaign (the same file in several languages is downloaded once).\nreturn $input.first().json.driveIds.map((id) => ({ json: { id } }));\n"
+      }
+    },
+    {
+      "id": "b2f0c001-0000-4000-8000-000000000103",
+      "name": "Download Drive image",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3952,
+        336
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.id }}"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b2f0c001-0000-4000-8000-000000000104",
+      "name": "Embed images",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4192,
+        432
+      ],
+      "parameters": {
+        "jsCode": "// Puts the downloaded Drive images in the campaign payload as data URLs. A job's \"asset:<id>\" value points at them,\n// and the Figma plugin builds the image from the bytes, so the Drive files never need to be public.\nconst { driveIds, ...payload } = $('Build campaign').first().json;\nconst items = $input.all();\nconst assets = {};\nfor (let i = 0; i < items.length; i++) {\n  if (!items[i].binary) continue; // no Drive images in this campaign\n  const id = driveIds[i];\n  const mime = items[i].binary.data.mimeType;\n  if (!mime?.startsWith('image/')) throw new Error(`The Drive file ${id} is a ${mime || 'file of unknown type'}, not an image (PNG, JPG or WebP).`);\n  const buffer = await this.helpers.getBinaryDataBuffer(i, 'data');\n  assets[id] = `data:${mime};base64,${buffer.toString('base64')}`;\n}\nreturn [{ json: Object.keys(assets).length ? { ...payload, assets } : payload }];\n"
+      }
     }
   ],
   "connections": {
@@ -1232,17 +1488,6 @@
       "main": [
         [
           {
-            "node": "Choose creatives",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Choose creatives": {
-      "main": [
-        [
-          {
             "node": "Build campaign",
             "type": "main",
             "index": 0
@@ -1254,7 +1499,7 @@
       "main": [
         [
           {
-            "node": "Queue campaign",
+            "node": "Has Drive images?",
             "type": "main",
             "index": 0
           }
@@ -1668,6 +1913,134 @@
         [
           {
             "node": "Upload items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily archive": {
+      "main": [
+        [
+          {
+            "node": "Settings (archive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings (archive)": {
+      "main": [
+        [
+          {
+            "node": "Read sheet (archive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read sheet (archive)": {
+      "main": [
+        [
+          {
+            "node": "Find old campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find old campaigns": {
+      "main": [
+        [
+          {
+            "node": "Split rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split rows": {
+      "main": [
+        [
+          {
+            "node": "Copy to Archive tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy to Archive tab": {
+      "main": [
+        [
+          {
+            "node": "Plan deletes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan deletes": {
+      "main": [
+        [
+          {
+            "node": "Delete archived rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Drive images?": {
+      "main": [
+        [
+          {
+            "node": "Drive files",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Embed images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive files": {
+      "main": [
+        [
+          {
+            "node": "Download Drive image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Drive image": {
+      "main": [
+        [
+          {
+            "node": "Embed images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed images": {
+      "main": [
+        [
+          {
+            "node": "Queue campaign",
             "type": "main",
             "index": 0
           }

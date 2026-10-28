@@ -39,6 +39,13 @@ assert(list.campaigns.length === 1 && list.campaigns[0].name === 'autumn-sale' &
 const full = await (await call(`/campaigns/${made.id}`)).json();
 assert(full.jobs.length === 2 && full.jobs[0].data.note === '' && full.jobs[1].data.cta === undefined, 'the payload comes back as queued, including empty (hide) values');
 
+const withAsset = { campaign: 'a', jobs: [{ template: 'H', ratio: 'Desktop', language: 'en', data: { background: 'asset:f1' } }], assets: { f1: 'data:image/png;base64,iVBORw0KGgo=' } };
+assert((await post('/campaigns', { ...withAsset, assets: {} })).status === 400, 'an asset: value needs its image in assets');
+assert((await post('/campaigns', { ...withAsset, assets: { f1: 'https://x/y.png' } })).status === 400, 'assets must be image data URLs');
+const assetId = (await (await post('/campaigns', withAsset)).json()).id;
+assert((await (await call(`/campaigns/${assetId}`)).json()).assets.f1.startsWith('data:image/png'), 'assets come back with the payload');
+await call(`/campaigns/${assetId}`, { method: 'DELETE' });
+
 const preflight = await call('/campaigns', { method: 'OPTIONS' });
 assert(preflight.status === 204 && preflight.headers.get('access-control-allow-origin') === '*', 'the plugin iframe can call it (CORS preflight)');
 

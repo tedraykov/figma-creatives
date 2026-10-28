@@ -18,7 +18,7 @@ const FORMATS = new Set(['png', 'jpg', 'jpeg', 'webp']);
 
 const app = express();
 app.set('trust proxy', true); // behind Traefik/Dokploy: req.protocol and secure cookies follow X-Forwarded-Proto
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
